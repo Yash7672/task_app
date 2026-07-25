@@ -1,0 +1,33 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+enum AppThemeMode { light, dark, amoled }
+
+class SettingsController extends StateNotifier<AppThemeMode> {
+  SettingsController() : super(AppThemeMode.light) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString('theme_mode');
+    if (stored == 'dark') {
+      state = AppThemeMode.dark;
+    } else if (stored == 'amoled') {
+      state = AppThemeMode.amoled;
+    } else {
+      state = AppThemeMode.light;
+    }
+  }
+
+  Future<void> setTheme(AppThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    state = mode;
+    await prefs.setString('theme_mode', mode.name);
+  }
+}
+
+final settingsProvider =
+    StateNotifierProvider<SettingsController, AppThemeMode>((ref) {
+  return SettingsController();
+});
