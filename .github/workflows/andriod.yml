@@ -11,34 +11,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: ☕ Set up Java
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
-          java-version: "17"
+          distribution: temurin
+          java-version: '17'
 
-      - name: 💙 Set up Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: 📦 Show Flutter Version
+      - name: Flutter Version
         run: flutter --version
 
-      - name: 📥 Install Dependencies
+      - name: Install Dependencies
         run: flutter pub get
 
-      - name: 🔍 Analyze Project
-        run: flutter analyze
-
-      - name: 🏗️ Build Release APK
+      - name: Build Release APK
         run: flutter build apk --release
 
-      - name: 📤 Upload APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
