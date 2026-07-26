@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../../../models/task_model.dart';
 import '../../../providers/task_provider.dart';
 import '../../dashboard/widgets/task_list_item.dart';
 
@@ -31,6 +30,11 @@ class CalendarScreen extends ConsumerWidget {
                 firstDay: DateTime.utc(2020, 1, 1),
                 lastDay: DateTime.utc(2030, 12, 31),
                 focusedDay: date,
+                calendarFormat: CalendarFormat.month,
+                availableCalendarFormats: const {
+                  CalendarFormat.month: 'Month',
+                },
+                headerStyle: const HeaderStyle(formatButtonVisible: false),
                 selectedDayPredicate: (day) => isSameDay(day, date),
                 onDaySelected: (selectedDay, _) =>
                     selectedDate.value = selectedDay,
@@ -49,9 +53,7 @@ class CalendarScreen extends ConsumerWidget {
                     padding: EdgeInsets.all(16),
                     child: Text('No tasks scheduled for this day.'))
               else
-                ...selectedTasks
-                    .map((task) => TaskListItem(task: task))
-                    .toList(),
+                ...selectedTasks.map((task) => TaskListItem(task: task)),
             ],
           );
         },

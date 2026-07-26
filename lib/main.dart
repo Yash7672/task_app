@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+
 import 'core/utils/notification_helper.dart';
 import 'database/database_helper.dart';
 import 'navigation/app_navigation.dart';
@@ -26,7 +27,11 @@ Future<void> main() async {
     await NotificationHelper.init();
   }
 
-  runApp(const ProviderScope(child: TaskFlowApp()));
+  runApp(
+    const ProviderScope(
+      child: TaskFlowApp(),
+    ),
+  );
 }
 
 class TaskFlowApp extends ConsumerWidget {
@@ -37,22 +42,24 @@ class TaskFlowApp extends ConsumerWidget {
     final themeMode = ref.watch(settingsProvider);
 
     ThemeMode mode;
+
     switch (themeMode) {
       case AppThemeMode.dark:
         mode = ThemeMode.dark;
         break;
+
       case AppThemeMode.amoled:
         mode = ThemeMode.dark;
         break;
+
       case AppThemeMode.light:
       default:
         mode = ThemeMode.light;
-        break;
     }
 
     return MaterialApp(
-      title: 'TaskFlow',
       debugShowCheckedModeBanner: false,
+      title: 'TaskFlow',
       theme: AppTheme.lightTheme,
       darkTheme: themeMode == AppThemeMode.amoled
           ? AppTheme.amoledTheme

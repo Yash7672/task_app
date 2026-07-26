@@ -165,6 +165,13 @@ final favoritesProvider = Provider<List<Task>>((ref) {
   return tasks.where((task) => task.isFavorite).toList();
 });
 
+final habitLogsProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, String>(
+        (ref, habitId) async {
+  final dbHelper = ref.watch(databaseProvider);
+  return dbHelper.getHabitLogs(habitId);
+});
+
 final habitsProvider =
     StateNotifierProvider<HabitNotifier, AsyncValue<List<Habit>>>((ref) {
   final dbHelper = ref.watch(databaseProvider);
@@ -194,6 +201,24 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       await loadHabits();
     } catch (e) {
       print('Error adding habit: $e');
+    }
+  }
+
+  Future<void> updateHabit(Habit habit) async {
+    try {
+      await dbHelper.updateHabit(habit);
+      await loadHabits();
+    } catch (e) {
+      print('Error updating habit: $e');
+    }
+  }
+
+  Future<void> deleteHabit(String id) async {
+    try {
+      await dbHelper.deleteHabit(id);
+      await loadHabits();
+    } catch (e) {
+      print('Error deleting habit: $e');
     }
   }
 

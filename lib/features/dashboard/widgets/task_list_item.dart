@@ -173,16 +173,123 @@ class TaskListItem extends ConsumerWidget {
                   },
                 ),
                 onTap: () {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => AddEditTaskScreen(taskToEdit: task)));
+                  _showTaskDetails(context, task, ref);
                 },
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showTaskDetails(
+      BuildContext context, Task task, WidgetRef ref) async {
+    final theme = Theme.of(context);
+    final priorityColor = AppColors.getPriorityColor(task.priority);
+    final categoryColor = AppColors.getCategoryColor(task.category);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(task.title,
+                            style: theme.textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                      ),
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: priorityColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (task.description.isNotEmpty)
+                    Text(task.description,
+                        style: theme.textTheme.bodyLarge
+                            ?.copyWith(color: Colors.grey[700])),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Chip(
+                        label: Text(task.category),
+                        backgroundColor: categoryColor.withValues(alpha: 0.15),
+                      ),
+                      const SizedBox(width: 8),
+                      Chip(
+                        label: Text(task.dueDate.toDisplayString()),
+                        backgroundColor: theme.colorScheme.primaryContainer,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Checklist',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  if (task.checklist.isEmpty)
+                    Text('No checklist items.',
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: Colors.grey[600]))
+                  else
+                    Column(
+                      children: task.checklist
+                          .map((item) => ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.check_circle_outline),
+                                title: Text(item),
+                              ))
+                          .toList(),
+                    ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  AddEditTaskScreen(taskToEdit: task),
+                            ),
+                          );
+                        },
+                        child: const Text('Edit'),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

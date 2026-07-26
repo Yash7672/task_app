@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/task_provider.dart';
+import '../../profile/screens/profile_screen.dart';
 import '../../tasks/screens/add_edit_task_screen.dart';
 import '../../tasks/screens/task_list_screen.dart';
 import '../widgets/task_list_item.dart';
@@ -22,8 +23,19 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TaskFlow',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/logo.png',
+              width: 32,
+              height: 32,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 12),
+            const Text('TaskFlow',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -32,7 +44,13 @@ class DashboardScreen extends ConsumerWidget {
                   MaterialPageRoute(builder: (_) => const TaskListScreen()));
             },
           ),
-          IconButton(icon: const Icon(Icons.person), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()));
+            },
+          ),
         ],
       ),
       body: SingleChildScrollView(

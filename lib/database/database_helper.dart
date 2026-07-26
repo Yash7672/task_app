@@ -264,6 +264,22 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> updateHabit(Habit habit) async {
+    final db = await database;
+    return db.update(
+      'habits',
+      habit.toMap(),
+      where: 'id = ?',
+      whereArgs: [habit.id],
+    );
+  }
+
+  Future<int> deleteHabit(String id) async {
+    final db = await database;
+    await db.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
+    return db.delete('habits', where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<List<Map<String, dynamic>>> getHabitLogs(String habitId) async {
     final db = await database;
     return db.query('habit_logs',
