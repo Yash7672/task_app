@@ -7,7 +7,10 @@ class StatsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tasks = ref.watch(allTasksProvider);
+    final tasks = ref
+        .watch(allTasksProvider)
+        .where((task) => !task.isArchived)
+        .toList();
     final completed = tasks.where((task) => task.isCompleted).length;
     final pending =
         tasks.where((task) => !task.isCompleted && !task.isDeleted).length;

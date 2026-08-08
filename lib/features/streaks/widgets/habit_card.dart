@@ -6,12 +6,10 @@ import 'habit_detail_popup.dart';
 
 class HabitCard extends ConsumerStatefulWidget {
   final Habit habit;
-  final String today;
 
   const HabitCard({
     super.key,
     required this.habit,
-    required this.today,
   });
 
   @override
@@ -112,10 +110,9 @@ class _HabitCardState extends ConsumerState<HabitCard> {
                                 final updated = await ref
                                     .read(habitsProvider.notifier)
                                     .completeToday(habit.id);
-                                setState(() => _isCompleting = false);
                                 if (!mounted) return;
+                                setState(() => _isCompleting = false);
                                 if (updated != null) {
-                                  final _ = ref.refresh(habitsProvider);
                                   final milestoneMessage = _getMilestoneMessage(
                                       updated.currentStreak);
                                   messenger.showSnackBar(
@@ -245,6 +242,7 @@ class _HabitCardState extends ConsumerState<HabitCard> {
   }
 
   Future<void> _showEditHabitDialog(BuildContext context, Habit habit) async {
+    final messenger = ScaffoldMessenger.of(context);
     final nameController = TextEditingController(text: habit.name);
     final descriptionController =
         TextEditingController(text: habit.description);
@@ -298,19 +296,17 @@ class _HabitCardState extends ConsumerState<HabitCard> {
     );
 
     if (result != null) {
-      final messenger = ScaffoldMessenger.of(context);
       await ref.read(habitsProvider.notifier).updateHabit(result);
       final _ = ref.refresh(habitsProvider);
-      if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Streak updated!')),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Streak updated!')),
+      );
     }
   }
 
   Future<void> _showDeleteConfirmation(
       BuildContext context, Habit habit) async {
+    final messenger = ScaffoldMessenger.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -331,14 +327,11 @@ class _HabitCardState extends ConsumerState<HabitCard> {
     );
 
     if (confirm == true) {
-      final messenger = ScaffoldMessenger.of(context);
       await ref.read(habitsProvider.notifier).deleteHabit(habit.id);
       final _ = ref.refresh(habitsProvider);
-      if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Streak deleted!')),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Streak deleted!')),
+      );
     }
   }
 }

@@ -37,7 +37,9 @@ class _AppLockGateState extends ConsumerState<AppLockGate> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsPreferencesProvider);
-    if (!settings.appLockEnabled || _authenticated) {
+    if (!settings.appLockEnabled ||
+        settings.appLockPin.isEmpty ||
+        _authenticated) {
       return const AppNavigation();
     }
 

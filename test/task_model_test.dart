@@ -68,7 +68,7 @@ void main() {
 
   test('marking a streak complete today increments the streak safely', () {
     final habit = Habit(name: 'Read 20 pages');
-    final updated = habit.markCompleted(now: DateTime(2026, 8, 7));
+    final updated = habit.markCompleted(now: DateTime.now());
 
     expect(updated.currentStreak, 1);
     expect(updated.bestStreak, 1);

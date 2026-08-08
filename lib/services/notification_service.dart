@@ -1,23 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz;
-import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
   static Future<void> initialize() async {
-    tz.initializeTimeZones();
-    try {
-      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timeZoneName));
-    } catch (e) {
-      print('Could not get local timezone');
-    }
+    tz_data.initializeTimeZones();
 
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/launcher_icon');
 
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -47,7 +41,7 @@ class NotificationService {
     required int minute,
   }) async {
     try {
-      await _notifications.cancelAll();
+      await _notifications.cancel(0);
 
       final scheduledTime = tz.TZDateTime(
         tz.local,
@@ -70,7 +64,7 @@ class NotificationService {
         channelDescription: 'Daily reminder to complete your habits',
         importance: Importance.max,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@mipmap/launcher_icon',
         enableVibration: true,
       );
 
@@ -102,7 +96,7 @@ class NotificationService {
 
       return true;
     } catch (e) {
-      print('Error scheduling notification: $e');
+      debugPrint('Error scheduling notification: $e');
       return false;
     }
   }
@@ -115,7 +109,7 @@ class NotificationService {
       channelDescription: 'Daily reminder to complete your habits',
       importance: Importance.max,
       priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
+      icon: '@mipmap/launcher_icon',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -172,6 +166,10 @@ class NotificationService {
 
   static Future<void> cancelAllNotifications() async {
     await _notifications.cancelAll();
+  }
+
+  static Future<void> cancelDailyReminder() async {
+    await _notifications.cancel(0);
   }
 
   static Future<void> cancelNotification(int id) async {

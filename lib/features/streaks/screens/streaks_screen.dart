@@ -17,7 +17,6 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
   Widget build(BuildContext context) {
     final habitsState = ref.watch(habitsProvider);
     final summary = ref.watch(streakSummaryProvider);
-    final today = DateTime.now().toIso8601String();
 
     return Scaffold(
       appBar: AppBar(
@@ -161,7 +160,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final habit = sortedHabits[index];
-                      return HabitCard(habit: habit, today: today);
+                      return HabitCard(habit: habit);
                     },
                     childCount: sortedHabits.length,
                   ),
@@ -273,7 +272,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
   }
 
   Future<void> _showStatsDialog() async {
-    final stats = await ref.read(overallStatsProvider.future);
+    final stats = ref.read(overallStatsProvider);
 
     if (!mounted) return;
 

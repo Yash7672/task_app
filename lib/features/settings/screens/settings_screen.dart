@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../providers/settings_provider.dart';
+import '../../../services/notification_service.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -76,6 +78,64 @@ class SettingsScreen extends ConsumerWidget {
           ),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
+            title: const Text('Daily habit reminder'),
+            subtitle: const Text('Get a nudge to complete your habits'),
+            value:
+                ref.watch(settingsPreferencesProvider).dailyReminderEnabled,
+            onChanged: (value) async {
+              if (value) {
+                final ok = await NotificationService.scheduleDailyReminder(
+                  hour: ref
+                      .watch(settingsPreferencesProvider)
+                      .dailyReminderHour,
+                  minute: ref
+                      .watch(settingsPreferencesProvider)
+                      .dailyReminderMinute,
+                );
+                if (ok) {
+                  await ref
+                      .read(settingsPreferencesProvider.notifier)
+                      .setDailyReminderEnabled(true);
+                }
+              } else {
+                await NotificationService.cancelDailyReminder();
+                await ref
+                    .read(settingsPreferencesProvider.notifier)
+                    .setDailyReminderEnabled(false);
+              }
+            },
+          ),
+          if (ref.watch(settingsPreferencesProvider).dailyReminderEnabled)
+            ListTile(
+              title: const Text('Reminder time'),
+              subtitle: Text(
+                '${ref.watch(settingsPreferencesProvider).dailyReminderHour.toString().padLeft(2, '0')}:${ref.watch(settingsPreferencesProvider).dailyReminderMinute.toString().padLeft(2, '0')}'),
+              trailing: const Icon(Icons.access_time),
+              onTap: () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(
+                    hour: ref
+                        .watch(settingsPreferencesProvider)
+                        .dailyReminderHour,
+                    minute: ref
+                        .watch(settingsPreferencesProvider)
+                        .dailyReminderMinute,
+                  ),
+                );
+                if (picked != null) {
+                  await ref
+                      .read(settingsPreferencesProvider.notifier)
+                      .setDailyReminderTime(picked.hour, picked.minute);
+                  await NotificationService.scheduleDailyReminder(
+                    hour: picked.hour,
+                    minute: picked.minute,
+                  );
+                }
+              },
+            ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
             title: const Text('App Lock'),
             subtitle: const Text('Keep the app protected with a PIN'),
             value: ref.watch(settingsPreferencesProvider).appLockEnabled,
@@ -117,6 +177,7 @@ class SettingsScreen extends ConsumerWidget {
                       .read(settingsPreferencesProvider.notifier)
                       .setAppLockEnabled(true);
                 }
+                pinController.dispose();
               } else {
                 await ref
                     .read(settingsPreferencesProvider.notifier)
@@ -161,12 +222,12 @@ class SettingsScreen extends ConsumerWidget {
                       .read(settingsPreferencesProvider.notifier)
                       .setAppLockPin(newPin);
                 }
+                pinController.dispose();
               },
             ),
           ListTile(
             title: const Text('Backup Database'),
-            subtitle:
-                const Text('Copy your local SQLite database path for backup'),
+            subtitle: const Text('Save a copy of your local database'),
             onTap: () async {
               if (kIsWeb) {
                 if (!context.mounted) return;
@@ -176,18 +237,27 @@ class SettingsScreen extends ConsumerWidget {
               }
 
               try {
-                final appDir = await getApplicationDocumentsDirectory();
-                final source = File(p.join(appDir.path, 'taskflow.db'));
+                final dbDir = await getDatabasesPath();
+                final source = File(p.join(dbDir, 'taskflow.db'));
                 if (!await source.exists()) {
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('No database exists yet.')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('No database exists yet.')));
                   return;
                 }
-                await Clipboard.setData(ClipboardData(text: source.path));
+
+                final appDir = await getApplicationDocumentsDirectory();
+                final backupDir = Directory(p.join(appDir.path, 'backups'));
+                await backupDir.create(recursive: true);
+                final stamp =
+                    DateTime.now().toIso8601String().replaceAll(':', '-');
+                final target = File(p.join(backupDir.path, 'taskflow_$stamp.db'));
+                await source.copy(target.path);
+                await Clipboard.setData(ClipboardData(text: target.path));
+
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Database path copied to clipboard.')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Backup saved to: ${target.path}')));
               } catch (e) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context)

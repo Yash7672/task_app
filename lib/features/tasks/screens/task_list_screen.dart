@@ -33,7 +33,8 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
         _ => true,
       };
 
-      final matchesArchiveVisibility = _showArchived || !task.isArchived;
+      final matchesArchiveVisibility =
+          _filter == 'Archived' || _showArchived || !task.isArchived;
       return matchesQuery && matchesFilter && matchesArchiveVisibility;
     }).toList();
 
