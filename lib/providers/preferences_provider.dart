@@ -6,12 +6,18 @@ class SettingsPreferences {
   final bool appLockEnabled;
   final String appLockPin;
   final int reminderMinutesBefore;
+  final bool dailyReminderEnabled;
+  final int dailyReminderHour;
+  final int dailyReminderMinute;
 
   SettingsPreferences({
     this.notificationsEnabled = true,
     this.appLockEnabled = false,
-    this.appLockPin = '1234',
+    this.appLockPin = '',
     this.reminderMinutesBefore = 15,
+    this.dailyReminderEnabled = false,
+    this.dailyReminderHour = 20,
+    this.dailyReminderMinute = 0,
   });
 
   SettingsPreferences copyWith({
@@ -19,6 +25,9 @@ class SettingsPreferences {
     bool? appLockEnabled,
     String? appLockPin,
     int? reminderMinutesBefore,
+    bool? dailyReminderEnabled,
+    int? dailyReminderHour,
+    int? dailyReminderMinute,
   }) {
     return SettingsPreferences(
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
@@ -26,6 +35,10 @@ class SettingsPreferences {
       appLockPin: appLockPin ?? this.appLockPin,
       reminderMinutesBefore:
           reminderMinutesBefore ?? this.reminderMinutesBefore,
+      dailyReminderEnabled:
+          dailyReminderEnabled ?? this.dailyReminderEnabled,
+      dailyReminderHour: dailyReminderHour ?? this.dailyReminderHour,
+      dailyReminderMinute: dailyReminderMinute ?? this.dailyReminderMinute,
     );
   }
 }
@@ -40,8 +53,12 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
     state = SettingsPreferences(
       notificationsEnabled: prefs.getBool('notifications_enabled') ?? true,
       appLockEnabled: prefs.getBool('app_lock_enabled') ?? false,
-      appLockPin: prefs.getString('app_lock_pin') ?? '1234',
+      appLockPin: prefs.getString('app_lock_pin') ?? '',
       reminderMinutesBefore: prefs.getInt('reminder_minutes_before') ?? 15,
+      dailyReminderEnabled:
+          prefs.getBool('daily_reminder_enabled') ?? false,
+      dailyReminderHour: prefs.getInt('daily_reminder_hour') ?? 20,
+      dailyReminderMinute: prefs.getInt('daily_reminder_minute') ?? 0,
     );
   }
 
@@ -67,6 +84,22 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
     final prefs = await SharedPreferences.getInstance();
     state = state.copyWith(reminderMinutesBefore: minutes);
     await prefs.setInt('reminder_minutes_before', minutes);
+  }
+
+  Future<void> setDailyReminderEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    state = state.copyWith(dailyReminderEnabled: enabled);
+    await prefs.setBool('daily_reminder_enabled', enabled);
+  }
+
+  Future<void> setDailyReminderTime(int hour, int minute) async {
+    final prefs = await SharedPreferences.getInstance();
+    state = state.copyWith(
+      dailyReminderHour: hour,
+      dailyReminderMinute: minute,
+    );
+    await prefs.setInt('daily_reminder_hour', hour);
+    await prefs.setInt('daily_reminder_minute', minute);
   }
 }
 

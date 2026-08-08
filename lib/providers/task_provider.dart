@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_helper.dart';
 import '../models/habit_model.dart';
@@ -20,7 +21,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> loadTasks() async {
     try {
       state = const AsyncValue.loading();
-      final tasks = await dbHelper.getAllTasks();
+      final tasks = await dbHelper.getAllTasks(includeArchived: true);
       state = AsyncValue.data(tasks);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -32,7 +33,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       await dbHelper.createTask(task);
       await loadTasks();
     } catch (e) {
-      print('Error adding task: $e');
+      debugPrint('Error adding task: $e');
     }
   }
 
@@ -41,7 +42,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       await dbHelper.updateTask(task);
       await loadTasks();
     } catch (e) {
-      print('Error updating task: $e');
+      debugPrint('Error updating task: $e');
     }
   }
 
@@ -50,7 +51,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       await dbHelper.archiveTask(id);
       await loadTasks();
     } catch (e) {
-      print('Error archiving task: $e');
+      debugPrint('Error archiving task: $e');
     }
   }
 
@@ -59,7 +60,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       await dbHelper.restoreTask(id);
       await loadTasks();
     } catch (e) {
-      print('Error restoring task: $e');
+      debugPrint('Error restoring task: $e');
     }
   }
 
@@ -72,7 +73,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       await dbHelper.deleteTask(id);
       await loadTasks();
     } catch (e) {
-      print('Error deleting task: $e');
+      debugPrint('Error deleting task: $e');
     }
   }
 
@@ -81,7 +82,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       await dbHelper.deleteTaskPermanently(id);
       await loadTasks();
     } catch (e) {
-      print('Error permanently deleting task: $e');
+      debugPrint('Error permanently deleting task: $e');
     }
   }
 
@@ -106,7 +107,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       await dbHelper.clearTasks();
       await loadTasks();
     } catch (e) {
-      print('Error clearing tasks: $e');
+      debugPrint('Error clearing tasks: $e');
     }
   }
 }
@@ -145,21 +146,6 @@ final upcomingTasksProvider = Provider<List<Task>>((ref) {
   }).toList();
 });
 
-final tasksByDateProvider = Provider<Map<DateTime, List<Task>>>((ref) {
-  final tasks = ref.watch(allTasksProvider);
-  final map = <DateTime, List<Task>>{};
-  
-  for (final task in tasks) {
-    if (task.isDeleted) continue;
-    final date = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    if (map[date] == null) {
-      map[date] = [];
-    }
-    map[date]!.add(task);
-  }
-  return map;
-});
-
 final overdueTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   final now = DateTime.now();
@@ -177,11 +163,13 @@ final overdueTasksProvider = Provider<List<Task>>((ref) {
 
 final favoritesProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
-  return tasks.where((task) => task.isFavorite).toList();
+  return tasks
+      .where((task) => task.isFavorite && !task.isArchived)
+      .toList();
 });
 
 final habitLogsProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>(
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
         (ref, habitId) async {
   final dbHelper = ref.watch(databaseProvider);
   return dbHelper.getHabitLogs(habitId);
@@ -193,9 +181,12 @@ final habitsProvider =
   return HabitNotifier(dbHelper);
 });
 
-final overallStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
-  final dbHelper = ref.watch(databaseProvider);
-  final habits = await dbHelper.getAllHabits();
+final overallStatsProvider = Provider<Map<String, dynamic>>((ref) {
+  final habitsState = ref.watch(habitsProvider);
+  final habits = habitsState.maybeWhen(
+    data: (items) => items,
+    orElse: () => <Habit>[],
+  );
   final totalStreaks = habits.length;
   final longestStreak = habits.fold<int>(
     0,
@@ -268,7 +259,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       await dbHelper.createHabit(habit);
       await loadHabits();
     } catch (e) {
-      print('Error adding habit: $e');
+      debugPrint('Error adding habit: $e');
     }
   }
 
@@ -277,7 +268,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       await dbHelper.updateHabit(habit);
       await loadHabits();
     } catch (e) {
-      print('Error updating habit: $e');
+      debugPrint('Error updating habit: $e');
     }
   }
 
@@ -286,7 +277,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       await dbHelper.deleteHabit(id);
       await loadHabits();
     } catch (e) {
-      print('Error deleting habit: $e');
+      debugPrint('Error deleting habit: $e');
     }
   }
 
@@ -297,12 +288,14 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
         return null;
       }
 
-      final updatedHabit = habit.markCompleted(now: now ?? DateTime.now());
+      final moment = now ?? DateTime.now();
+      final updatedHabit = habit.markCompleted(now: moment);
       await dbHelper.updateHabit(updatedHabit);
+      await dbHelper.logHabitCompletion(habitId, moment.toIso8601String());
       await loadHabits();
       return updatedHabit;
     } catch (e) {
-      print('Error logging habit: $e');
+      debugPrint('Error logging habit: $e');
       return null;
     }
   }

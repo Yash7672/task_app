@@ -1,36 +1,49 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 class NotificationHelper {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
+  static const AndroidNotificationDetails _androidDetails =
+      AndroidNotificationDetails(
+    'taskflow_channel',
+    'TaskFlow Notifications',
+    channelDescription: 'Reminders for your tasks',
+    importance: Importance.high,
+    priority: Priority.high,
+  );
+
   static Future<void> init() async {
     if (kIsWeb) {
       return;
     }
-    tz.initializeTimeZones();
+
+    tz_data.initializeTimeZones();
     try {
-      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timeZoneName));
+      final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
     } catch (e) {
-      print('Could not get local timezone: $e');
+      debugPrint('Timezone init failed: $e');
     }
 
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings();
-
     const InitializationSettings settings = InitializationSettings(
-      android: androidSettings,
+      android: AndroidInitializationSettings('@mipmap/launcher_icon'),
       iOS: iosSettings,
     );
 
     await _notifications.initialize(settings);
+
+    final androidImpl = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidImpl?.requestNotificationsPermission();
+    await androidImpl?.requestExactAlarmsPermission();
   }
 
   static Future<void> showNotification({
@@ -39,20 +52,9 @@ class NotificationHelper {
     required String body,
     String? payload,
   }) async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      'taskflow_channel',
-      'TaskFlow Notifications',
-      channelDescription: 'Reminders for your tasks',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
-
     const NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
+      android: _androidDetails,
+      iOS: DarwinNotificationDetails(),
     );
 
     await _notifications.show(id, title, body, details, payload: payload);
@@ -63,35 +65,40 @@ class NotificationHelper {
     required String title,
     required String body,
     required DateTime scheduledDate,
-    String? payload,
   }) async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      'task_reminder_channel',
-      'Task Reminders',
-      channelDescription: 'Reminders for specific tasks at their due date',
-      importance: Importance.max,
-      priority: Priority.high,
+    if (kIsWeb) {
+      return;
+    }
+    final now = DateTime.now();
+    if (!scheduledDate.isAfter(now)) {
+      return;
+    }
+
+    const details = NotificationDetails(
+      android: _androidDetails,
+      iOS: DarwinNotificationDetails(),
     );
 
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
-
-    const NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    // Schedule notification for the exact time using tz.TZDateTime
     await _notifications.zonedSchedule(
       id,
       title,
       body,
-      tz.TZDateTime.from(scheduledDate, tz.local),
+      _toTZDate(scheduledDate),
       details,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      payload: payload,
     );
+  }
+
+  static Future<void> cancel(int id) async {
+    if (kIsWeb) {
+      return;
+    }
+    await _notifications.cancel(id);
+  }
+
+  static tz.TZDateTime _toTZDate(DateTime date) {
+    return tz.TZDateTime.from(date, tz.local);
   }
 }

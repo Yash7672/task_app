@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 class Task {
+  static const _clear = Object();
+
   final String id;
   final String title;
   final String description;
@@ -60,8 +62,8 @@ class Task {
     String? category,
     String? priority,
     DateTime? dueDate,
-    DateTime? startTime,
-    DateTime? endTime,
+    Object? startTime = _clear,
+    Object? endTime = _clear,
     bool? isCompleted,
     bool? isArchived,
     bool? isDeleted,
@@ -73,7 +75,7 @@ class Task {
     List<String>? checklist,
     int? reminderMinutesBefore,
     String? estimatedDuration,
-    DateTime? completedAt,
+    Object? completedAt = _clear,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -84,8 +86,8 @@ class Task {
       category: category ?? this.category,
       priority: priority ?? this.priority,
       dueDate: dueDate ?? this.dueDate,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
+      startTime: startTime == _clear ? this.startTime : startTime as DateTime?,
+      endTime: endTime == _clear ? this.endTime : endTime as DateTime?,
       isCompleted: isCompleted ?? this.isCompleted,
       isArchived: isArchived ?? this.isArchived,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -98,7 +100,8 @@ class Task {
       reminderMinutesBefore:
           reminderMinutesBefore ?? this.reminderMinutesBefore,
       estimatedDuration: estimatedDuration ?? this.estimatedDuration,
-      completedAt: completedAt ?? this.completedAt,
+      completedAt:
+          completedAt == _clear ? this.completedAt : completedAt as DateTime?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -142,13 +145,20 @@ class Task {
       parsedChecklist = checklistValue.map((e) => e.toString()).toList();
     }
 
+    final createdAt = map['createdAt'] != null
+        ? _parseDate(map['createdAt'])
+        : DateTime.now();
+    final updatedAt = map['updatedAt'] != null
+        ? _parseDate(map['updatedAt'])
+        : DateTime.now();
+
     return Task(
       id: map['id'],
       title: map['title'] ?? '',
       description: map['description'] ?? '',
       category: map['category'] ?? 'Personal',
       priority: map['priority'] ?? 'Medium',
-      dueDate: _parseDate(map['dueDate']),
+      dueDate: _parseDate(map['dueDate'], fallback: createdAt),
       startTime: map['startTime'] != null ? _parseDate(map['startTime']) : null,
       endTime: map['endTime'] != null ? _parseDate(map['endTime']) : null,
       isCompleted: map['isCompleted'] == 1,
@@ -164,23 +174,19 @@ class Task {
       estimatedDuration: map['estimatedDuration'] ?? '',
       completedAt:
           map['completedAt'] != null ? _parseDate(map['completedAt']) : null,
-      createdAt: map['createdAt'] != null
-          ? _parseDate(map['createdAt'])
-          : DateTime.now(),
-      updatedAt: map['updatedAt'] != null
-          ? _parseDate(map['updatedAt'])
-          : DateTime.now(),
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     );
   }
 
-  static DateTime _parseDate(dynamic value) {
+  static DateTime _parseDate(dynamic value, {DateTime? fallback}) {
     if (value is int) {
       return DateTime.fromMillisecondsSinceEpoch(value);
     }
     if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime.now();
+      return DateTime.tryParse(value) ?? (fallback ?? DateTime.now());
     }
-    return DateTime.now();
+    return fallback ?? DateTime.now();
   }
 
   Task nextOccurrence() {
@@ -188,16 +194,22 @@ class Task {
       return copyWith();
     }
 
-    final increment = switch (repeatRule.toLowerCase()) {
-      'daily' => const Duration(days: 1),
-      'weekly' => const Duration(days: 7),
-      'monthly' => const Duration(days: 30),
-      'yearly' => const Duration(days: 365),
-      _ => const Duration(days: 1),
-    };
+    final DateTime nextDate;
+    switch (repeatRule.toLowerCase()) {
+      case 'daily':
+        nextDate = dueDate.add(const Duration(days: 1));
+      case 'weekly':
+        nextDate = dueDate.add(const Duration(days: 7));
+      case 'monthly':
+        nextDate = DateTime(dueDate.year, dueDate.month + 1, dueDate.day);
+      case 'yearly':
+        nextDate = DateTime(dueDate.year + 1, dueDate.month, dueDate.day);
+      default:
+        nextDate = dueDate.add(const Duration(days: 1));
+    }
 
     return copyWith(
-      dueDate: dueDate.add(increment),
+      dueDate: nextDate,
       isCompleted: false,
       completedAt: null,
       updatedAt: DateTime.now(),

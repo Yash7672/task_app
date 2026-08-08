@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/notification_helper.dart';
 import '../../../features/tasks/screens/add_edit_task_screen.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/task_provider.dart';
@@ -27,9 +28,20 @@ class TaskListItem extends ConsumerWidget {
       ),
       direction: DismissDirection.endToStart,
       onDismissed: (_) {
+        NotificationHelper.cancel(task.id.hashCode);
         ref.read(taskProvider.notifier).deleteTask(task.id);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Task moved to trash')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Task moved to trash'),
+            action: SnackBarAction(
+              label: 'Undo',
+              onPressed: () {
+                ref.read(taskProvider.notifier).restoreTask(task.id);
+                _scheduleReminderIfNeeded(task);
+              },
+            ),
+          ),
+        );
       },
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -135,17 +147,17 @@ class TaskListItem extends ConsumerWidget {
                         ref.read(taskProvider.notifier).togglePin(task);
                         break;
                       case 'archive':
+                        NotificationHelper.cancel(task.id.hashCode);
                         ref.read(taskProvider.notifier).archiveTask(task.id);
                         break;
                       case 'restore':
                         ref
                             .read(taskProvider.notifier)
                             .restoreTaskFromModel(task);
+                        _scheduleReminderIfNeeded(task);
                         break;
                       case 'delete':
-                        ref
-                            .read(taskProvider.notifier)
-                            .deleteTaskPermanently(task.id);
+                        _confirmPermanentDelete(context, task, ref);
                         break;
                       default:
                         break;
@@ -181,6 +193,44 @@ class TaskListItem extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _scheduleReminderIfNeeded(Task task) {
+    if (task.reminderMinutesBefore <= 0) {
+      return;
+    }
+    NotificationHelper.scheduleTaskReminder(
+      id: task.id.hashCode,
+      title: 'Task Reminder',
+      body: 'Upcoming task: ${task.title}',
+      scheduledDate: task.dueDate
+          .subtract(Duration(minutes: task.reminderMinutesBefore)),
+    );
+  }
+
+  Future<void> _confirmPermanentDelete(
+      BuildContext context, Task task, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete permanently?'),
+        content: const Text('This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      NotificationHelper.cancel(task.id.hashCode);
+      ref.read(taskProvider.notifier).deleteTaskPermanently(task.id);
+    }
   }
 
   Future<void> _showTaskDetails(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/task_model.dart';
 import '../../../providers/task_provider.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../tasks/screens/add_edit_task_screen.dart';
@@ -53,22 +54,21 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: _buildGreetingHeader(theme, progress)),
-          SliverToBoxAdapter(
-              child: _buildStreakSummaryCard(theme, streakSummary)),
-          SliverToBoxAdapter(
-              child: _buildStatsRow(theme, todayTasks.length, overdueTasks.length,
-                  favorites.length)),
-          SliverToBoxAdapter(
-              child: _buildSectionHeader(theme, 'Today', todayTasks.length)),
-          _buildTaskList(todayTasks),
-          SliverToBoxAdapter(
-              child: _buildSectionHeader(theme, 'Upcoming', upcomingTasks.length)),
-          _buildTaskList(upcomingTasks),
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
-        ],
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildGreetingHeader(theme, progress),
+            _buildStreakSummaryCard(theme, streakSummary),
+            _buildStatsRow(theme, todayTasks.length, overdueTasks.length,
+                favorites.length),
+            _buildSectionHeader(theme, 'Today', todayTasks.length),
+            _buildTaskList(todayTasks),
+            _buildSectionHeader(theme, 'Upcoming', upcomingTasks.length),
+            _buildTaskList(upcomingTasks),
+            const SizedBox(height: 80),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
@@ -260,18 +260,18 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTaskList(List<dynamic> tasks) {
+  Widget _buildTaskList(List<Task> tasks) {
     if (tasks.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Center(
-              child: Text('No tasks here.',
-                  style: TextStyle(color: Colors.grey[500]))),
-        ),
+      return Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Center(
+            child: Text('No tasks here.',
+                style: TextStyle(color: Colors.grey[500]))),
       );
     }
-    return SliverList.builder(
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: tasks.length,
       itemBuilder: (context, index) => TaskListItem(task: tasks[index]),
     );

@@ -32,11 +32,14 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
     setState(() => _isLoading = true);
     try {
       final logs = await ref.read(habitLogsProvider(widget.habit.id).future);
+      if (!mounted) return;
       _groupLogsByDate(logs);
     } catch (e) {
       debugPrint('Error loading logs: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

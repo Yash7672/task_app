@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/notification_helper.dart';
 import '../../../models/task_model.dart';
+import '../../../providers/preferences_provider.dart';
 import '../../../providers/task_provider.dart';
 
 class AddEditTaskScreen extends ConsumerStatefulWidget {
@@ -70,6 +72,8 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     _durationController =
         TextEditingController(text: widget.taskToEdit?.estimatedDuration ?? '');
     _checklistController = TextEditingController();
+    final defaultReminder =
+        ref.read(settingsPreferencesProvider).reminderMinutesBefore;
     if (widget.taskToEdit != null) {
       _selectedCategory = widget.taskToEdit!.category;
       _selectedPriority = widget.taskToEdit!.priority;
@@ -79,6 +83,8 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       _endTime = widget.taskToEdit!.endTime;
       _reminderMinutesBefore = widget.taskToEdit!.reminderMinutesBefore;
       _checklist = List<String>.from(widget.taskToEdit!.checklist);
+    } else {
+      _reminderMinutesBefore = defaultReminder;
     }
   }
 
@@ -99,7 +105,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() => _dueDate = picked);
     }
   }
@@ -110,7 +116,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
         : (_endTime ?? DateTime.now()));
     final picked =
         await showTimePicker(context: context, initialTime: initialTime);
-    if (picked != null) {
+    if (picked != null && mounted) {
       final dateTime = DateTime(_dueDate.year, _dueDate.month, _dueDate.day,
           picked.hour, picked.minute);
       setState(() {
@@ -132,37 +138,55 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     });
   }
 
-  void _saveTask() {
-    if (_formKey.currentState!.validate()) {
-      final task = Task(
-        id: widget.taskToEdit?.id,
-        title: _titleController.text.trim(),
-        description: _descController.text.trim(),
-        category: _selectedCategory,
-        priority: _selectedPriority,
-        dueDate: _dueDate,
-        startTime: _startTime,
-        endTime: _endTime,
-        notes: _notesController.text.trim(),
-        repeatRule: _repeatRule,
-        checklist: _checklist,
-        reminderMinutesBefore: _reminderMinutesBefore,
-        estimatedDuration: _durationController.text.trim(),
-        isCompleted: widget.taskToEdit?.isCompleted ?? false,
-        isArchived: widget.taskToEdit?.isArchived ?? false,
-        isDeleted: widget.taskToEdit?.isDeleted ?? false,
-        isFavorite: widget.taskToEdit?.isFavorite ?? false,
-        isPinned: widget.taskToEdit?.isPinned ?? false,
-        createdAt: widget.taskToEdit?.createdAt,
-        updatedAt: widget.taskToEdit?.updatedAt,
+  Future<void> _saveTask() async {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    final reminderScheduled = _reminderMinutesBefore > 0 &&
+        ref.read(settingsPreferencesProvider).notificationsEnabled;
+    final task = Task(
+      id: widget.taskToEdit?.id,
+      title: _titleController.text.trim(),
+      description: _descController.text.trim(),
+      category: _selectedCategory,
+      priority: _selectedPriority,
+      dueDate: _dueDate,
+      startTime: _startTime,
+      endTime: _endTime,
+      notes: _notesController.text.trim(),
+      repeatRule: _repeatRule,
+      checklist: _checklist,
+      reminderMinutesBefore: _reminderMinutesBefore,
+      estimatedDuration: _durationController.text.trim(),
+      isCompleted: widget.taskToEdit?.isCompleted ?? false,
+      isArchived: widget.taskToEdit?.isArchived ?? false,
+      isDeleted: widget.taskToEdit?.isDeleted ?? false,
+      isFavorite: widget.taskToEdit?.isFavorite ?? false,
+      isPinned: widget.taskToEdit?.isPinned ?? false,
+      createdAt: widget.taskToEdit?.createdAt,
+      color: widget.taskToEdit?.color ?? '',
+    );
+
+    if (widget.taskToEdit != null) {
+      await NotificationHelper.cancel(task.id.hashCode);
+      await ref.read(taskProvider.notifier).updateTask(task);
+    } else {
+      await ref.read(taskProvider.notifier).addTask(task);
+    }
+
+    if (reminderScheduled) {
+      final reminderDate =
+          _dueDate.subtract(Duration(minutes: _reminderMinutesBefore));
+      await NotificationHelper.scheduleTaskReminder(
+        id: task.id.hashCode,
+        title: 'Task Reminder',
+        body: 'Upcoming task: ${task.title}',
+        scheduledDate: reminderDate,
       );
+    }
 
-      if (widget.taskToEdit == null) {
-        ref.read(taskProvider.notifier).addTask(task);
-      } else {
-        ref.read(taskProvider.notifier).updateTask(task);
-      }
-
+    if (mounted) {
       Navigator.pop(context);
     }
   }

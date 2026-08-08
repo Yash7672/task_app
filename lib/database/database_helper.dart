@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -36,6 +36,21 @@ class DatabaseHelper {
       if (!hasLastCompletedDate) {
         await db
             .execute('ALTER TABLE habits ADD COLUMN lastCompletedDate INTEGER');
+      }
+    }
+    if (oldVersion < 3) {
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'habit_logs'",
+      );
+      if (tables.isEmpty) {
+        await db.execute('''
+          CREATE TABLE habit_logs (
+            id TEXT PRIMARY KEY,
+            habitId TEXT,
+            date TEXT,
+            isCompleted INTEGER DEFAULT 0
+          )
+        ''');
       }
     }
   }
@@ -143,7 +158,19 @@ class DatabaseHelper {
     final db = await database;
     final result = await db.query(
       'tasks',
-      where: includeArchived ? null : 'isDeleted = 0',
+      where: includeArchived
+          ? 'isDeleted = 0'
+          : 'isDeleted = 0 AND isArchived = 0',
+      orderBy: 'dueDate ASC',
+    );
+    return result.map((json) => Task.fromMap(json)).toList();
+  }
+
+  Future<List<Task>> getArchivedTasks() async {
+    final db = await database;
+    final result = await db.query(
+      'tasks',
+      where: 'isDeleted = 0 AND isArchived = 1',
       orderBy: 'dueDate ASC',
     );
     return result.map((json) => Task.fromMap(json)).toList();
@@ -173,7 +200,7 @@ class DatabaseHelper {
     final result = await db.query(
       'tasks',
       where:
-          'title LIKE ? OR description LIKE ? OR notes LIKE ? OR category LIKE ?',
+          'title LIKE ? OR description LIKE ? OR notes LIKE ? OR category LIKE ? AND isDeleted = 0 AND isArchived = 0',
       whereArgs: [value, value, value, value],
       orderBy: 'dueDate ASC',
     );

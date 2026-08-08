@@ -44,7 +44,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       bio: _bioController.text.trim(),
     );
     await ref.read(profileProvider.notifier).updateProfile(updated);
-    setState(() => _isEditing = false);
+    if (mounted) {
+      setState(() => _isEditing = false);
+    }
   }
 
   @override

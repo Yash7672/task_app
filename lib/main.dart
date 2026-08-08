@@ -6,7 +6,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'core/utils/notification_helper.dart';
 import 'database/database_helper.dart';
-import 'navigation/app_navigation.dart';
+import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/settings_provider.dart';
 import 'theme/app_theme.dart';
 
@@ -41,31 +41,20 @@ class TaskFlowApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(settingsProvider);
 
-    ThemeMode mode;
-
-    switch (themeMode) {
-      case AppThemeMode.dark:
-        mode = ThemeMode.dark;
-        break;
-
-      case AppThemeMode.amoled:
-        mode = ThemeMode.dark;
-        break;
-
-      case AppThemeMode.light:
-      default:
-        mode = ThemeMode.light;
-    }
+    final ThemeMode mode = switch (themeMode) {
+      AppThemeMode.dark || AppThemeMode.amoled => ThemeMode.dark,
+      AppThemeMode.light => ThemeMode.light,
+    };
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'PYLO', // <-- CHANGED from 'TaskFlow' to 'PYLO'
+      title: 'PYLO',
       theme: AppTheme.lightTheme,
       darkTheme: themeMode == AppThemeMode.amoled
           ? AppTheme.amoledTheme
           : AppTheme.darkTheme,
       themeMode: mode,
-      home: const AppNavigation(),
+      home: const AppLockGate(),
     );
   }
 }
