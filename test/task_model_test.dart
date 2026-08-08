@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:task_app/models/habit_model.dart';
 import 'package:task_app/models/task_model.dart';
 
 void main() {
@@ -63,5 +64,14 @@ void main() {
     final restored = task.restore();
     expect(restored.isArchived, isFalse);
     expect(restored.isDeleted, isFalse);
+  });
+
+  test('marking a streak complete today increments the streak safely', () {
+    final habit = Habit(name: 'Read 20 pages');
+    final updated = habit.markCompleted(now: DateTime(2026, 8, 7));
+
+    expect(updated.currentStreak, 1);
+    expect(updated.bestStreak, 1);
+    expect(updated.isCompletedToday, isTrue);
   });
 }

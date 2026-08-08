@@ -178,6 +178,59 @@ final habitsProvider =
   return HabitNotifier(dbHelper);
 });
 
+final overallStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final dbHelper = ref.watch(databaseProvider);
+  final habits = await dbHelper.getAllHabits();
+  final totalStreaks = habits.length;
+  final longestStreak = habits.fold<int>(
+    0,
+    (previousValue, habit) => habit.currentStreak > previousValue
+        ? habit.currentStreak
+        : previousValue,
+  );
+  final averageStreak = totalStreaks == 0
+      ? 0.0
+      : habits.fold<int>(0, (sum, habit) => sum + habit.currentStreak) /
+          totalStreaks;
+  final completedToday = habits.where((habit) => habit.isCompletedToday).length;
+  final bestStreakEver = habits.fold<int>(
+    0,
+    (previousValue, habit) =>
+        habit.bestStreak > previousValue ? habit.bestStreak : previousValue,
+  );
+
+  return {
+    'totalStreaks': totalStreaks,
+    'longestStreak': longestStreak,
+    'averageStreak': averageStreak,
+    'completedToday': completedToday,
+    'bestStreakEver': bestStreakEver,
+  };
+});
+
+final streakSummaryProvider = Provider<Map<String, dynamic>>((ref) {
+  final habitsState = ref.watch(habitsProvider);
+  final habits = habitsState.maybeWhen(
+    data: (items) => items,
+    orElse: () => <Habit>[],
+  );
+
+  final activeStreaks = habits.where((habit) => habit.currentStreak > 0).length;
+  final longestStreak = habits.fold<int>(
+    0,
+    (previousValue, habit) => habit.currentStreak > previousValue
+        ? habit.currentStreak
+        : previousValue,
+  );
+  final completedToday = habits.where((habit) => habit.isCompletedToday).length;
+
+  return {
+    'activeStreaks': activeStreaks,
+    'longestStreak': longestStreak,
+    'completedToday': completedToday,
+  };
+});
+
 class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
   final DatabaseHelper dbHelper;
 
@@ -222,13 +275,20 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
     }
   }
 
-  Future<void> logToday(String habitId) async {
+  Future<Habit?> completeToday(String habitId, {DateTime? now}) async {
     try {
-      final today = DateTime.now().toIso8601String().split('T').first;
-      await dbHelper.logHabitCompletion(habitId, today);
+      final habit = await dbHelper.getHabit(habitId);
+      if (habit == null) {
+        return null;
+      }
+
+      final updatedHabit = habit.markCompleted(now: now ?? DateTime.now());
+      await dbHelper.updateHabit(updatedHabit);
       await loadHabits();
+      return updatedHabit;
     } catch (e) {
       print('Error logging habit: $e');
+      return null;
     }
   }
 }

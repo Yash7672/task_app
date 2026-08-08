@@ -15,6 +15,7 @@ class DashboardScreen extends ConsumerWidget {
     final upcomingTasks = ref.watch(upcomingTasksProvider);
     final overdueTasks = ref.watch(overdueTasksProvider);
     final favorites = ref.watch(favoritesProvider);
+    final streakSummary = ref.watch(streakSummaryProvider);
     final theme = Theme.of(context);
     final completedCount = todayTasks.where((task) => task.isCompleted).length;
     final progress = todayTasks.isEmpty
@@ -58,6 +59,7 @@ class DashboardScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildGreetingHeader(theme, progress),
+            _buildStreakSummaryCard(theme, streakSummary),
             _buildStatsRow(theme, todayTasks.length, overdueTasks.length,
                 favorites.length),
             _buildSectionHeader(theme, 'Today', todayTasks.length),
@@ -132,6 +134,67 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStreakSummaryCard(
+      ThemeData theme, Map<String, dynamic> streakSummary) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              theme.colorScheme.primaryContainer,
+              theme.colorScheme.secondaryContainer,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.local_fire_department, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text(
+                  'Streak momentum',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                _chip(theme, 'Active ${streakSummary['activeStreaks'] ?? 0}'),
+                _chip(
+                    theme, 'Best ${streakSummary['longestStreak'] ?? 0} days'),
+                _chip(theme,
+                    'Completed today ${streakSummary['completedToday'] ?? 0}'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(ThemeData theme, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label, style: theme.textTheme.labelMedium),
     );
   }
 

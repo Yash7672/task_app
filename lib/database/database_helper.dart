@@ -21,9 +21,23 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      final columns = await db.rawQuery('PRAGMA table_info(habits)');
+      final hasLastCompletedDate = columns.any(
+        (column) => column['name'] == 'lastCompletedDate',
+      );
+      if (!hasLastCompletedDate) {
+        await db
+            .execute('ALTER TABLE habits ADD COLUMN lastCompletedDate INTEGER');
+      }
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -68,9 +82,9 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
-        frequency TEXT,
         currentStreak INTEGER DEFAULT 0,
         bestStreak INTEGER DEFAULT 0,
+        lastCompletedDate INTEGER,
         createdAt INTEGER,
         updatedAt INTEGER
       )
@@ -242,6 +256,15 @@ class DatabaseHelper {
     await db.insert('habits', habit.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
     return habit;
+  }
+
+  Future<Habit?> getHabit(String id) async {
+    final db = await database;
+    final maps = await db.query('habits', where: 'id = ?', whereArgs: [id]);
+    if (maps.isNotEmpty) {
+      return Habit.fromMap(maps.first);
+    }
+    return null;
   }
 
   Future<List<Habit>> getAllHabits() async {

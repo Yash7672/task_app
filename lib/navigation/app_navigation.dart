@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../features/calendar/screens/calendar_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
-import '../features/habits/screens/habits_screen.dart';
 import '../features/settings/screens/settings_screen.dart';
 import '../features/stats/screens/stats_screen.dart';
+import '../features/streaks/screens/streaks_screen.dart';
 import '../features/tasks/screens/task_list_screen.dart';
 
 class AppNavigation extends StatefulWidget {
@@ -20,7 +20,7 @@ class _AppNavigationState extends State<AppNavigation> {
     DashboardScreen(),
     CalendarScreen(),
     TaskListScreen(),
-    HabitsScreen(),
+    StreaksScreen(),
     StatsScreen(),
     SettingsScreen(),
   ];
@@ -39,7 +39,7 @@ class _AppNavigationState extends State<AppNavigation> {
               icon: Icon(Icons.calendar_month), label: 'Calendar'),
           NavigationDestination(icon: Icon(Icons.list_alt), label: 'Tasks'),
           NavigationDestination(
-              icon: Icon(Icons.auto_awesome), label: 'Habits'),
+              icon: Icon(Icons.local_fire_department), label: 'Streaks'),
           NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Stats'),
           NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
