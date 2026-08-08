@@ -59,7 +59,7 @@ class TaskFlowApp extends ConsumerWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'TaskFlow',
+      title: 'PYLO', // <-- CHANGED from 'TaskFlow' to 'PYLO'
       theme: AppTheme.lightTheme,
       darkTheme: themeMode == AppThemeMode.amoled
           ? AppTheme.amoledTheme

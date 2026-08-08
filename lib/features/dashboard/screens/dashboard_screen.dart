@@ -33,8 +33,7 @@ class DashboardScreen extends ConsumerWidget {
               fit: BoxFit.contain,
             ),
             const SizedBox(width: 12),
-            const Text('TaskFlow',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('PYLO', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
