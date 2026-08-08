@@ -152,7 +152,7 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
                     color: Colors.blue.shade100,
                     shape: BoxShape.circle,
                   ),
-                  selectedDecoration: BoxDecoration(
+                  selectedDecoration: const BoxDecoration(
                     color: Colors.blue,
                     shape: BoxShape.circle,
                   ),
@@ -231,7 +231,7 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 2,
                     ),
                   ],

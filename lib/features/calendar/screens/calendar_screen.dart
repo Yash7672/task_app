@@ -9,7 +9,7 @@ class CalendarScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tasks = ref.watch(allTasksProvider);
+    final tasksMap = ref.watch(tasksByDateProvider);
     final selectedDate = ValueNotifier<DateTime>(DateTime.now());
 
     return Scaffold(
@@ -17,12 +17,8 @@ class CalendarScreen extends ConsumerWidget {
       body: ValueListenableBuilder<DateTime>(
         valueListenable: selectedDate,
         builder: (context, date, _) {
-          final selectedTasks = tasks.where((task) {
-            final sameDay = task.dueDate.year == date.year &&
-                task.dueDate.month == date.month &&
-                task.dueDate.day == date.day;
-            return sameDay && !task.isDeleted;
-          }).toList();
+          final normalizedDate = DateTime(date.year, date.month, date.day);
+          final selectedTasks = tasksMap[normalizedDate] ?? [];
 
           return ListView(
             children: [
@@ -38,9 +34,10 @@ class CalendarScreen extends ConsumerWidget {
                 selectedDayPredicate: (day) => isSameDay(day, date),
                 onDaySelected: (selectedDay, _) =>
                     selectedDate.value = selectedDay,
-                eventLoader: (day) => tasks
-                    .where((task) => isSameDay(task.dueDate, day))
-                    .toList(),
+                eventLoader: (day) {
+                  final d = DateTime(day.year, day.month, day.day);
+                  return tasksMap[d] ?? [];
+                },
               ),
               const SizedBox(height: 8),
               Padding(

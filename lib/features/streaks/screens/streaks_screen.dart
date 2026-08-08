@@ -141,7 +141,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.35),
+                                color: Colors.white.withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(16)),
                             child: Text('${summary['completedToday']}',
                                 style: Theme.of(context)

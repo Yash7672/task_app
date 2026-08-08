@@ -9,7 +9,7 @@ import '../../../utils/extensions.dart';
 class TaskListItem extends ConsumerWidget {
   final Task task;
 
-  const TaskListItem({Key? key, required this.task}) : super(key: key);
+  const TaskListItem({super.key, required this.task});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

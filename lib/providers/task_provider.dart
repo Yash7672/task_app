@@ -145,6 +145,21 @@ final upcomingTasksProvider = Provider<List<Task>>((ref) {
   }).toList();
 });
 
+final tasksByDateProvider = Provider<Map<DateTime, List<Task>>>((ref) {
+  final tasks = ref.watch(allTasksProvider);
+  final map = <DateTime, List<Task>>{};
+  
+  for (final task in tasks) {
+    if (task.isDeleted) continue;
+    final date = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+    if (map[date] == null) {
+      map[date] = [];
+    }
+    map[date]!.add(task);
+  }
+  return map;
+});
+
 final overdueTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   final now = DateTime.now();

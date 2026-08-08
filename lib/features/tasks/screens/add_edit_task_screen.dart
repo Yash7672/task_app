@@ -6,7 +6,7 @@ import '../../../providers/task_provider.dart';
 class AddEditTaskScreen extends ConsumerStatefulWidget {
   final Task? taskToEdit;
 
-  const AddEditTaskScreen({Key? key, this.taskToEdit}) : super(key: key);
+  const AddEditTaskScreen({super.key, this.taskToEdit});
 
   @override
   ConsumerState<AddEditTaskScreen> createState() => _AddEditTaskScreenState();
@@ -204,7 +204,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedCategory,
+                      initialValue: _selectedCategory,
                       decoration: const InputDecoration(
                           labelText: 'Category', border: OutlineInputBorder()),
                       items: _categories
@@ -212,15 +212,16 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                               (c) => DropdownMenuItem(value: c, child: Text(c)))
                           .toList(),
                       onChanged: (val) {
-                        if (val != null)
+                        if (val != null) {
                           setState(() => _selectedCategory = val);
+                        }
                       },
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedPriority,
+                      initialValue: _selectedPriority,
                       decoration: const InputDecoration(
                           labelText: 'Priority', border: OutlineInputBorder()),
                       items: _priorities
@@ -228,8 +229,9 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                               (p) => DropdownMenuItem(value: p, child: Text(p)))
                           .toList(),
                       onChanged: (val) {
-                        if (val != null)
+                        if (val != null) {
                           setState(() => _selectedPriority = val);
+                        }
                       },
                     ),
                   ),
@@ -237,7 +239,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _repeatRule,
+                initialValue: _repeatRule,
                 decoration: const InputDecoration(
                     labelText: 'Repeat Rule', border: OutlineInputBorder()),
                 items: _repeatRules
@@ -276,7 +278,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                 onTap: () => _pickTime(isStart: false),
               ),
               DropdownButtonFormField<int>(
-                value: _reminderMinutesBefore,
+                initialValue: _reminderMinutesBefore,
                 decoration: const InputDecoration(
                     labelText: 'Reminder Before', border: OutlineInputBorder()),
                 items: _reminderOptions

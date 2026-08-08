@@ -7,7 +7,7 @@ import '../../tasks/screens/task_list_screen.dart';
 import '../widgets/task_list_item.dart';
 
 class DashboardScreen extends ConsumerWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -53,21 +53,22 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildGreetingHeader(theme, progress),
-            _buildStreakSummaryCard(theme, streakSummary),
-            _buildStatsRow(theme, todayTasks.length, overdueTasks.length,
-                favorites.length),
-            _buildSectionHeader(theme, 'Today', todayTasks.length),
-            _buildTaskList(todayTasks),
-            _buildSectionHeader(theme, 'Upcoming', upcomingTasks.length),
-            _buildTaskList(upcomingTasks),
-            const SizedBox(height: 80),
-          ],
-        ),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _buildGreetingHeader(theme, progress)),
+          SliverToBoxAdapter(
+              child: _buildStreakSummaryCard(theme, streakSummary)),
+          SliverToBoxAdapter(
+              child: _buildStatsRow(theme, todayTasks.length, overdueTasks.length,
+                  favorites.length)),
+          SliverToBoxAdapter(
+              child: _buildSectionHeader(theme, 'Today', todayTasks.length)),
+          _buildTaskList(todayTasks),
+          SliverToBoxAdapter(
+              child: _buildSectionHeader(theme, 'Upcoming', upcomingTasks.length)),
+          _buildTaskList(upcomingTasks),
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
@@ -190,7 +191,7 @@ class DashboardScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.7),
+        color: theme.colorScheme.surface.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: theme.textTheme.labelMedium),
@@ -261,16 +262,16 @@ class DashboardScreen extends ConsumerWidget {
 
   Widget _buildTaskList(List<dynamic> tasks) {
     if (tasks.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Center(
-            child: Text('No tasks here.',
-                style: TextStyle(color: Colors.grey[500]))),
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Center(
+              child: Text('No tasks here.',
+                  style: TextStyle(color: Colors.grey[500]))),
+        ),
       );
     }
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return SliverList.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) => TaskListItem(task: tasks[index]),
     );

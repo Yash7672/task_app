@@ -55,7 +55,7 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonFormField<String>(
-              value: _filter,
+              initialValue: _filter,
               decoration: const InputDecoration(
                   labelText: 'Filter', border: OutlineInputBorder()),
               items: const [
