@@ -1,6 +1,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -8,6 +9,12 @@ class NotificationService {
 
   static Future<void> initialize() async {
     tz.initializeTimeZones();
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      print('Could not get local timezone');
+    }
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -76,13 +83,16 @@ class NotificationService {
         iOS: iosDetails,
       );
 
-      await _notifications.periodicallyShow(
+      await _notifications.zonedSchedule(
         0,
         '⏰ Time to complete your habits!',
         'Don\'t break your streak! Open the app and mark your progress.',
-        RepeatInterval.daily,
+        scheduledDate,
         platformDetails,
-        androidAllowWhileIdle: true,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
       );
 
       await showImmediateNotification(
