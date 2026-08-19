@@ -15,8 +15,7 @@ class AppNavigation extends StatefulWidget {
 
 class _AppNavigationState extends State<AppNavigation> {
   int _currentIndex = 0;
-
-  final _pages = const [
+  final List<Widget> _pages = const [
     DashboardScreen(),
     CalendarScreen(),
     TaskListScreen(),

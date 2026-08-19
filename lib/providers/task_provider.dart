@@ -28,10 +28,19 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     }
   }
 
+  List<Task> get _currentTasks => state.maybeWhen(
+        data: (tasks) => tasks,
+        orElse: () => [],
+      );
+
+  void _updateState(List<Task> tasks) {
+    state = AsyncValue.data(tasks);
+  }
+
   Future<void> addTask(Task task) async {
     try {
       await dbHelper.createTask(task);
-      await loadTasks();
+      _updateState([..._currentTasks, task]);
     } catch (e) {
       debugPrint('Error adding task: $e');
     }
@@ -40,7 +49,13 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> updateTask(Task task) async {
     try {
       await dbHelper.updateTask(task);
-      await loadTasks();
+      final tasks = _currentTasks;
+      final index = tasks.indexWhere((t) => t.id == task.id);
+      if (index != -1) {
+        final updated = List<Task>.from(tasks);
+        updated[index] = task;
+        _updateState(updated);
+      }
     } catch (e) {
       debugPrint('Error updating task: $e');
     }
@@ -49,7 +64,14 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> archiveTask(String id) async {
     try {
       await dbHelper.archiveTask(id);
-      await loadTasks();
+      final tasks = _currentTasks;
+      final index = tasks.indexWhere((t) => t.id == id);
+      if (index != -1) {
+        final updated = List<Task>.from(tasks);
+        updated[index] =
+            updated[index].copyWith(isArchived: true, updatedAt: DateTime.now());
+        _updateState(updated);
+      }
     } catch (e) {
       debugPrint('Error archiving task: $e');
     }
@@ -58,7 +80,14 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> restoreTask(String id) async {
     try {
       await dbHelper.restoreTask(id);
-      await loadTasks();
+      final tasks = _currentTasks;
+      final index = tasks.indexWhere((t) => t.id == id);
+      if (index != -1) {
+        final updated = List<Task>.from(tasks);
+        updated[index] = updated[index]
+            .copyWith(isArchived: false, isDeleted: false, updatedAt: DateTime.now());
+        _updateState(updated);
+      }
     } catch (e) {
       debugPrint('Error restoring task: $e');
     }
@@ -71,7 +100,14 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> deleteTask(String id) async {
     try {
       await dbHelper.deleteTask(id);
-      await loadTasks();
+      final tasks = _currentTasks;
+      final index = tasks.indexWhere((t) => t.id == id);
+      if (index != -1) {
+        final updated = List<Task>.from(tasks);
+        updated[index] = updated[index].copyWith(
+            isDeleted: true, isArchived: true, updatedAt: DateTime.now());
+        _updateState(updated);
+      }
     } catch (e) {
       debugPrint('Error deleting task: $e');
     }
@@ -80,7 +116,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> deleteTaskPermanently(String id) async {
     try {
       await dbHelper.deleteTaskPermanently(id);
-      await loadTasks();
+      _updateState(_currentTasks.where((t) => t.id != id).toList());
     } catch (e) {
       debugPrint('Error permanently deleting task: $e');
     }
@@ -105,7 +141,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> clearAllTasks() async {
     try {
       await dbHelper.clearTasks();
-      await loadTasks();
+      _updateState([]);
     } catch (e) {
       debugPrint('Error clearing tasks: $e');
     }
@@ -244,6 +280,15 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
     loadHabits();
   }
 
+  List<Habit> get _currentHabits => state.maybeWhen(
+        data: (habits) => habits,
+        orElse: () => [],
+      );
+
+  void _updateState(List<Habit> habits) {
+    state = AsyncValue.data(habits);
+  }
+
   Future<void> loadHabits() async {
     try {
       state = const AsyncValue.loading();
@@ -257,7 +302,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
   Future<void> addHabit(Habit habit) async {
     try {
       await dbHelper.createHabit(habit);
-      await loadHabits();
+      _updateState([habit, ..._currentHabits]);
     } catch (e) {
       debugPrint('Error adding habit: $e');
     }
@@ -266,7 +311,13 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
   Future<void> updateHabit(Habit habit) async {
     try {
       await dbHelper.updateHabit(habit);
-      await loadHabits();
+      final habits = _currentHabits;
+      final index = habits.indexWhere((h) => h.id == habit.id);
+      if (index != -1) {
+        final updated = List<Habit>.from(habits);
+        updated[index] = habit;
+        _updateState(updated);
+      }
     } catch (e) {
       debugPrint('Error updating habit: $e');
     }
@@ -275,7 +326,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
   Future<void> deleteHabit(String id) async {
     try {
       await dbHelper.deleteHabit(id);
-      await loadHabits();
+      _updateState(_currentHabits.where((h) => h.id != id).toList());
     } catch (e) {
       debugPrint('Error deleting habit: $e');
     }
@@ -292,7 +343,15 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       final updatedHabit = habit.markCompleted(now: moment);
       await dbHelper.updateHabit(updatedHabit);
       await dbHelper.logHabitCompletion(habitId, moment.toIso8601String());
-      await loadHabits();
+
+      final habits = _currentHabits;
+      final index = habits.indexWhere((h) => h.id == habitId);
+      if (index != -1) {
+        final updated = List<Habit>.from(habits);
+        updated[index] = updatedHabit;
+        _updateState(updated);
+      }
+
       return updatedHabit;
     } catch (e) {
       debugPrint('Error logging habit: $e');

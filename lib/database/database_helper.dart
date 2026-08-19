@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import '../models/category_model.dart';
@@ -8,6 +9,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
   DatabaseHelper._internal();
   static Database? _database;
+  static String? _cachedDbPath;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -16,12 +18,14 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = p.join(dbPath, filePath);
+    if (_cachedDbPath == null) {
+      final dbPath = await getDatabasesPath();
+      _cachedDbPath = p.join(dbPath, filePath);
+    }
 
     return openDatabase(
-      path,
-      version: 3,
+      _cachedDbPath!,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -53,6 +57,48 @@ class DatabaseHelper {
         ''');
       }
     }
+    if (oldVersion < 4) {
+      final columns = await db.rawQuery('PRAGMA table_info(tasks)');
+      final hasNew = columns.any((c) => c['name'] == 'reminderMinutes');
+      final hasOld = columns.any((c) => c['name'] == 'reminderMinutesBefore');
+      if (!hasNew) {
+        await db.execute(
+            "ALTER TABLE tasks ADD COLUMN reminderMinutes TEXT DEFAULT '[]'");
+      }
+      if (hasOld && hasNew) {
+        final rows = await db.query('tasks', columns: ['id', 'reminderMinutesBefore', 'reminderMinutes']);
+        for (final row in rows) {
+          final oldVal = row['reminderMinutesBefore'];
+          final newVal = row['reminderMinutes'];
+          if (newVal == null || newVal == '[]' || newVal == '') {
+            final List<int> migrated = [];
+            if (oldVal is int && oldVal > 0) {
+              migrated.add(oldVal);
+            }
+            await db.update(
+              'tasks',
+              {'reminderMinutes': jsonEncode(migrated)},
+              where: 'id = ?',
+              whereArgs: [row['id']],
+            );
+          }
+        }
+        await db.execute('ALTER TABLE tasks DROP COLUMN reminderMinutesBefore');
+      }
+      await _createIndexes(db);
+    }
+  }
+
+  Future<void> _createIndexes(Database db) async {
+    final indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_tasks_isDeleted_isArchived ON tasks(isDeleted, isArchived)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_dueDate ON tasks(dueDate)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)',
+      'CREATE INDEX IF NOT EXISTS idx_habit_logs_habitId ON habit_logs(habitId)',
+    ];
+    for (final sql in indexes) {
+      await db.execute(sql);
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -75,7 +121,7 @@ class DatabaseHelper {
         repeatRule TEXT,
         color TEXT,
         checklist TEXT,
-        reminderMinutesBefore INTEGER DEFAULT 0,
+        reminderMinutes TEXT DEFAULT '[]',
         estimatedDuration TEXT,
         completedAt INTEGER,
         createdAt INTEGER,
@@ -136,6 +182,13 @@ class DatabaseHelper {
       await db.insert('categories', item,
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
+
+    await db.execute(
+        'CREATE INDEX idx_tasks_isDeleted_isArchived ON tasks(isDeleted, isArchived)');
+    await db.execute('CREATE INDEX idx_tasks_dueDate ON tasks(dueDate)');
+    await db.execute('CREATE INDEX idx_tasks_category ON tasks(category)');
+    await db.execute(
+        'CREATE INDEX idx_habit_logs_habitId ON habit_logs(habitId)');
   }
 
   Future<Task> createTask(Task task) async {
@@ -200,7 +253,7 @@ class DatabaseHelper {
     final result = await db.query(
       'tasks',
       where:
-          'title LIKE ? OR description LIKE ? OR notes LIKE ? OR category LIKE ? AND isDeleted = 0 AND isArchived = 0',
+          '(title LIKE ? OR description LIKE ? OR notes LIKE ? OR category LIKE ?) AND isDeleted = 0 AND isArchived = 0',
       whereArgs: [value, value, value, value],
       orderBy: 'dueDate ASC',
     );

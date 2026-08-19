@@ -28,7 +28,7 @@ class TaskListItem extends ConsumerWidget {
       ),
       direction: DismissDirection.endToStart,
       onDismissed: (_) {
-        NotificationHelper.cancel(task.id.hashCode);
+        NotificationHelper.cancelAllForTask(task.id);
         ref.read(taskProvider.notifier).deleteTask(task.id);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -147,7 +147,7 @@ class TaskListItem extends ConsumerWidget {
                         ref.read(taskProvider.notifier).togglePin(task);
                         break;
                       case 'archive':
-                        NotificationHelper.cancel(task.id.hashCode);
+                        NotificationHelper.cancelAllForTask(task.id);
                         ref.read(taskProvider.notifier).archiveTask(task.id);
                         break;
                       case 'restore':
@@ -196,15 +196,16 @@ class TaskListItem extends ConsumerWidget {
   }
 
   void _scheduleReminderIfNeeded(Task task) {
-    if (task.reminderMinutesBefore <= 0) {
+    if (task.reminderMinutes.isEmpty) {
       return;
     }
-    NotificationHelper.scheduleTaskReminder(
-      id: task.id.hashCode,
-      title: 'Task Reminder',
-      body: 'Upcoming task: ${task.title}',
-      scheduledDate: task.dueDate
-          .subtract(Duration(minutes: task.reminderMinutesBefore)),
+    final taskDateTime = task.startTime ??
+        DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day, 9, 0);
+    NotificationHelper.scheduleTaskReminders(
+      taskId: task.id,
+      taskTitle: task.title,
+      taskDateTime: taskDateTime,
+      reminderMinutes: task.reminderMinutes,
     );
   }
 
@@ -228,7 +229,7 @@ class TaskListItem extends ConsumerWidget {
       ),
     );
     if (confirmed == true && context.mounted) {
-      NotificationHelper.cancel(task.id.hashCode);
+      NotificationHelper.cancelAllForTask(task.id);
       ref.read(taskProvider.notifier).deleteTaskPermanently(task.id);
     }
   }

@@ -28,7 +28,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   DateTime _dueDate = DateTime.now();
   DateTime? _startTime;
   DateTime? _endTime;
-  int _reminderMinutesBefore = 0;
+  List<int> _selectedReminders = [];
   List<String> _checklist = [];
 
   final List<String> _categories = [
@@ -58,7 +58,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     'Monthly',
     'Yearly'
   ];
-  final List<int> _reminderOptions = [0, 5, 10, 15, 30, 60, 120];
+  final List<int> _reminderOptions = [1, 5, 10, 15, 30, 60];
 
   @override
   void initState() {
@@ -72,8 +72,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     _durationController =
         TextEditingController(text: widget.taskToEdit?.estimatedDuration ?? '');
     _checklistController = TextEditingController();
-    final defaultReminder =
-        ref.read(settingsPreferencesProvider).reminderMinutesBefore;
     if (widget.taskToEdit != null) {
       _selectedCategory = widget.taskToEdit!.category;
       _selectedPriority = widget.taskToEdit!.priority;
@@ -81,10 +79,11 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       _dueDate = widget.taskToEdit!.dueDate;
       _startTime = widget.taskToEdit!.startTime;
       _endTime = widget.taskToEdit!.endTime;
-      _reminderMinutesBefore = widget.taskToEdit!.reminderMinutesBefore;
+      _selectedReminders = List<int>.from(widget.taskToEdit!.reminderMinutes);
       _checklist = List<String>.from(widget.taskToEdit!.checklist);
     } else {
-      _reminderMinutesBefore = defaultReminder;
+      _selectedReminders = List<int>.from(
+          ref.read(settingsPreferencesProvider).reminderMinutes);
     }
   }
 
@@ -143,7 +142,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       return;
     }
 
-    final reminderScheduled = _reminderMinutesBefore > 0 &&
+    final hasReminders = _selectedReminders.isNotEmpty &&
         ref.read(settingsPreferencesProvider).notificationsEnabled;
     final task = Task(
       id: widget.taskToEdit?.id,
@@ -157,7 +156,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       notes: _notesController.text.trim(),
       repeatRule: _repeatRule,
       checklist: _checklist,
-      reminderMinutesBefore: _reminderMinutesBefore,
+      reminderMinutes: _selectedReminders,
       estimatedDuration: _durationController.text.trim(),
       isCompleted: widget.taskToEdit?.isCompleted ?? false,
       isArchived: widget.taskToEdit?.isArchived ?? false,
@@ -169,20 +168,20 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     );
 
     if (widget.taskToEdit != null) {
-      await NotificationHelper.cancel(task.id.hashCode);
+      await NotificationHelper.cancelAllForTask(task.id);
       await ref.read(taskProvider.notifier).updateTask(task);
     } else {
       await ref.read(taskProvider.notifier).addTask(task);
     }
 
-    if (reminderScheduled) {
-      final reminderDate =
-          _dueDate.subtract(Duration(minutes: _reminderMinutesBefore));
-      await NotificationHelper.scheduleTaskReminder(
-        id: task.id.hashCode,
-        title: 'Task Reminder',
-        body: 'Upcoming task: ${task.title}',
-        scheduledDate: reminderDate,
+    if (hasReminders) {
+      final taskDateTime = _startTime ??
+          DateTime(_dueDate.year, _dueDate.month, _dueDate.day, 9, 0);
+      await NotificationHelper.scheduleTaskReminders(
+        taskId: task.id,
+        taskTitle: task.title,
+        taskDateTime: taskDateTime,
+        reminderMinutes: _selectedReminders,
       );
     }
 
@@ -301,19 +300,31 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                 trailing: const Icon(Icons.access_time),
                 onTap: () => _pickTime(isStart: false),
               ),
-              DropdownButtonFormField<int>(
-                initialValue: _reminderMinutesBefore,
-                decoration: const InputDecoration(
-                    labelText: 'Reminder Before', border: OutlineInputBorder()),
-                items: _reminderOptions
-                    .map((value) => DropdownMenuItem(
-                        value: value,
-                        child:
-                            Text(value == 0 ? 'No reminder' : '$value mins')))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _reminderMinutesBefore = val);
-                },
+              const SizedBox(height: 12),
+              Text('Reminders (before task)',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _reminderOptions.map((minutes) {
+                  final isSelected = _selectedReminders.contains(minutes);
+                  final label = minutes == 1 ? '1 min' : '$minutes min';
+                  return FilterChip(
+                    label: Text(label),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedReminders.add(minutes);
+                          _selectedReminders.sort();
+                        } else {
+                          _selectedReminders.remove(minutes);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 12),
               TextFormField(

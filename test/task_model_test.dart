@@ -12,7 +12,7 @@ void main() {
       checklist: const ['Read notes', 'Solve questions'],
       isFavorite: true,
       isPinned: true,
-      reminderMinutesBefore: 30,
+      reminderMinutes: [10, 30],
     );
 
     final map = task.toMap();
@@ -22,7 +22,7 @@ void main() {
     expect(restored.checklist, ['Read notes', 'Solve questions']);
     expect(restored.isFavorite, isTrue);
     expect(restored.isPinned, isTrue);
-    expect(restored.reminderMinutesBefore, 30);
+    expect(restored.reminderMinutes, [10, 30]);
   });
 
   test('recurring tasks advance to the next occurrence', () {

@@ -2,9 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Light Theme
-  static ThemeData get lightTheme {
-    return ThemeData(
+  static late final ThemeData _lightTheme;
+  static late final ThemeData _darkTheme;
+  static late final ThemeData _amoledTheme;
+  static bool _initialized = false;
+
+  static void _ensureInitialized() {
+    if (_initialized) return;
+    _initialized = true;
+
+    _lightTheme = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
         seedColor: Colors.deepPurple,
@@ -22,11 +29,8 @@ class AppTheme {
         elevation: 2,
       ),
     );
-  }
 
-  // Dark Theme
-  static ThemeData get darkTheme {
-    return ThemeData(
+    _darkTheme = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
         seedColor: Colors.deepPurple,
@@ -44,23 +48,34 @@ class AppTheme {
         elevation: 2,
       ),
     );
-  }
 
-  // AMOLED Black Theme
-  static ThemeData get amoledTheme {
-    final dark = darkTheme;
-    return dark.copyWith(
+    _amoledTheme = _darkTheme.copyWith(
       scaffoldBackgroundColor: Colors.black,
-      appBarTheme: dark.appBarTheme.copyWith(
+      appBarTheme: _darkTheme.appBarTheme.copyWith(
         backgroundColor: Colors.black,
       ),
-      colorScheme: dark.colorScheme.copyWith(
+      colorScheme: _darkTheme.colorScheme.copyWith(
         surface: Colors.black,
-        surfaceContainerHighest: const Color(0xFF1E1E1E), // For cards and surfaces
+        surfaceContainerHighest: const Color(0xFF1E1E1E),
       ),
-      cardTheme: dark.cardTheme.copyWith(
+      cardTheme: _darkTheme.cardTheme.copyWith(
         color: const Color(0xFF1E1E1E),
       ),
     );
+  }
+
+  static ThemeData get lightTheme {
+    _ensureInitialized();
+    return _lightTheme;
+  }
+
+  static ThemeData get darkTheme {
+    _ensureInitialized();
+    return _darkTheme;
+  }
+
+  static ThemeData get amoledTheme {
+    _ensureInitialized();
+    return _amoledTheme;
   }
 }

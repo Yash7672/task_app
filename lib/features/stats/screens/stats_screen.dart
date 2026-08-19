@@ -7,13 +7,11 @@ class StatsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tasks = ref
-        .watch(allTasksProvider)
-        .where((task) => !task.isArchived)
-        .toList();
+    final tasks = ref.watch(allTasksProvider);
     final completed = tasks.where((task) => task.isCompleted).length;
     final pending =
-        tasks.where((task) => !task.isCompleted && !task.isDeleted).length;
+        tasks.where((task) => !task.isCompleted && !task.isArchived).length;
+    final total = tasks.where((task) => !task.isArchived).length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Statistics')),
@@ -30,7 +28,7 @@ class StatsScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             _statCard(context, 'Completed', '$completed'),
             _statCard(context, 'Pending', '$pending'),
-            _statCard(context, 'Total', '${tasks.length}'),
+            _statCard(context, 'Total', '$total'),
           ],
         ),
       ),

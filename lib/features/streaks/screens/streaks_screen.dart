@@ -21,8 +21,6 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('🔥 Streaks'),
-        centerTitle: false,
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         actions: [
           IconButton(
             icon: const Icon(Icons.stacked_bar_chart_outlined),

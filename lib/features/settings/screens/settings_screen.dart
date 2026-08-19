@@ -1,14 +1,12 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../services/notification_service.dart';
+import '../../../core/utils/backup_helper_native.dart'
+    if (dart.library.js) '../../../core/utils/backup_helper_web.dart' as backup_helper;
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -51,29 +49,44 @@ class SettingsScreen extends ConsumerWidget {
                 .setNotificationsEnabled(value),
           ),
           ListTile(
-            title: const Text('Reminder default'),
+            title: const Text('Default reminders'),
             subtitle: Text(
-              ref.watch(settingsPreferencesProvider).reminderMinutesBefore == 0
-                  ? 'No default reminder'
-                  : '${ref.watch(settingsPreferencesProvider).reminderMinutesBefore} minutes before',
+              ref.watch(settingsPreferencesProvider).reminderMinutes.isEmpty
+                  ? 'No default reminders'
+                  : ref.watch(settingsPreferencesProvider).reminderMinutes
+                      .map((m) => '$m min')
+                      .join(', '),
             ),
-            trailing: DropdownButton<int>(
-              value:
-                  ref.watch(settingsPreferencesProvider).reminderMinutesBefore,
+            trailing: DropdownButton<String>(
+              value: null,
+              hint: const Text('Edit'),
               onChanged: (value) {
                 if (value != null) {
+                  final current = List<int>.from(
+                      ref.read(settingsPreferencesProvider).reminderMinutes);
+                  final mins = int.tryParse(value) ?? 0;
+                  if (mins > 0 && !current.contains(mins)) {
+                    current.add(mins);
+                    current.sort();
+                  } else if (mins > 0 && current.contains(mins)) {
+                    current.remove(mins);
+                  } else if (mins == 0) {
+                    current.clear();
+                  }
                   ref
                       .read(settingsPreferencesProvider.notifier)
-                      .setReminderMinutesBefore(value);
+                      .setReminderMinutes(current);
                 }
               },
-              items: const [0, 5, 10, 15, 30, 60]
-                  .map((minutes) => DropdownMenuItem(
-                        value: minutes,
-                        child: Text(
-                            minutes == 0 ? 'None' : '$minutes mins before'),
-                      ))
-                  .toList(),
+              items: const [
+                DropdownMenuItem(value: '0', child: Text('Clear all')),
+                DropdownMenuItem(value: '1', child: Text('1 min')),
+                DropdownMenuItem(value: '5', child: Text('5 min')),
+                DropdownMenuItem(value: '10', child: Text('10 min')),
+                DropdownMenuItem(value: '15', child: Text('15 min')),
+                DropdownMenuItem(value: '30', child: Text('30 min')),
+                DropdownMenuItem(value: '60', child: Text('60 min')),
+              ],
             ),
           ),
           SwitchListTile.adaptive(
@@ -84,21 +97,24 @@ class SettingsScreen extends ConsumerWidget {
                 ref.watch(settingsPreferencesProvider).dailyReminderEnabled,
             onChanged: (value) async {
               if (value) {
-                final ok = await NotificationService.scheduleDailyReminder(
-                  hour: ref
-                      .watch(settingsPreferencesProvider)
-                      .dailyReminderHour,
-                  minute: ref
-                      .watch(settingsPreferencesProvider)
-                      .dailyReminderMinute,
-                );
-                if (ok) {
-                  await ref
-                      .read(settingsPreferencesProvider.notifier)
-                      .setDailyReminderEnabled(true);
+                if (!kIsWeb) {
+                  final ok = await NotificationService.scheduleDailyReminder(
+                    hour: ref
+                        .watch(settingsPreferencesProvider)
+                        .dailyReminderHour,
+                    minute: ref
+                        .watch(settingsPreferencesProvider)
+                        .dailyReminderMinute,
+                  );
+                  if (!ok) return;
                 }
+                await ref
+                    .read(settingsPreferencesProvider.notifier)
+                    .setDailyReminderEnabled(true);
               } else {
-                await NotificationService.cancelDailyReminder();
+                if (!kIsWeb) {
+                  await NotificationService.cancelDailyReminder();
+                }
                 await ref
                     .read(settingsPreferencesProvider.notifier)
                     .setDailyReminderEnabled(false);
@@ -127,10 +143,12 @@ class SettingsScreen extends ConsumerWidget {
                   await ref
                       .read(settingsPreferencesProvider.notifier)
                       .setDailyReminderTime(picked.hour, picked.minute);
-                  await NotificationService.scheduleDailyReminder(
-                    hour: picked.hour,
-                    minute: picked.minute,
-                  );
+                  if (!kIsWeb) {
+                    await NotificationService.scheduleDailyReminder(
+                      hour: picked.hour,
+                      minute: picked.minute,
+                    );
+                  }
                 }
               },
             ),
@@ -237,27 +255,17 @@ class SettingsScreen extends ConsumerWidget {
               }
 
               try {
-                final dbDir = await getDatabasesPath();
-                final source = File(p.join(dbDir, 'taskflow.db'));
-                if (!await source.exists()) {
+                final result = await backup_helper.performBackup();
+                if (result == null) {
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('No database exists yet.')));
                   return;
                 }
-
-                final appDir = await getApplicationDocumentsDirectory();
-                final backupDir = Directory(p.join(appDir.path, 'backups'));
-                await backupDir.create(recursive: true);
-                final stamp =
-                    DateTime.now().toIso8601String().replaceAll(':', '-');
-                final target = File(p.join(backupDir.path, 'taskflow_$stamp.db'));
-                await source.copy(target.path);
-                await Clipboard.setData(ClipboardData(text: target.path));
-
+                await Clipboard.setData(ClipboardData(text: result));
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('Backup saved to: ${target.path}')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Backup saved to: $result')));
               } catch (e) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context)

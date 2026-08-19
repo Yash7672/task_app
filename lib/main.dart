@@ -17,6 +17,16 @@ Future<void> main() async {
     databaseFactory = databaseFactoryFfiWeb;
   }
 
+  runApp(
+    const ProviderScope(
+      child: TaskFlowApp(),
+    ),
+  );
+
+  _initBackgroundServices();
+}
+
+Future<void> _initBackgroundServices() async {
   try {
     await DatabaseHelper.instance.initDatabase();
   } catch (e, stackTrace) {
@@ -24,14 +34,12 @@ Future<void> main() async {
   }
 
   if (!kIsWeb) {
-    await NotificationHelper.init();
+    try {
+      await NotificationHelper.init();
+    } catch (e) {
+      debugPrint('Notification init failed: $e');
+    }
   }
-
-  runApp(
-    const ProviderScope(
-      child: TaskFlowApp(),
-    ),
-  );
 }
 
 class TaskFlowApp extends ConsumerWidget {

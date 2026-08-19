@@ -27,11 +27,13 @@ class DashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Row(
           children: [
-            Image.asset(
-              'assets/logo.png',
-              width: 32,
-              height: 32,
-              fit: BoxFit.contain,
+            ClipOval(
+              child: Image.asset(
+                'assets/logo.png',
+                width: 30,
+                height: 30,
+                fit: BoxFit.cover,
+              ),
             ),
             const SizedBox(width: 12),
             const Text('PYLO', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -269,11 +271,9 @@ class DashboardScreen extends ConsumerWidget {
                 style: TextStyle(color: Colors.grey[500]))),
       );
     }
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: tasks.length,
-      itemBuilder: (context, index) => TaskListItem(task: tasks[index]),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: tasks.map((task) => TaskListItem(task: task)).toList(),
     );
   }
 }

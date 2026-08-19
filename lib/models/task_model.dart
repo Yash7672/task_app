@@ -21,7 +21,7 @@ class Task {
   final String repeatRule;
   final String color;
   final List<String> checklist;
-  final int reminderMinutesBefore;
+  final List<int> reminderMinutes;
   final String estimatedDuration;
   final DateTime? completedAt;
   final DateTime createdAt;
@@ -45,13 +45,14 @@ class Task {
     this.repeatRule = 'Never',
     this.color = '',
     List<String>? checklist,
-    this.reminderMinutesBefore = 0,
+    List<int>? reminderMinutes,
     this.estimatedDuration = '',
     this.completedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
         checklist = checklist ?? const [],
+        reminderMinutes = reminderMinutes ?? const [],
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
@@ -73,7 +74,7 @@ class Task {
     String? repeatRule,
     String? color,
     List<String>? checklist,
-    int? reminderMinutesBefore,
+    List<int>? reminderMinutes,
     String? estimatedDuration,
     Object? completedAt = _clear,
     DateTime? createdAt,
@@ -97,8 +98,7 @@ class Task {
       repeatRule: repeatRule ?? this.repeatRule,
       color: color ?? this.color,
       checklist: checklist ?? this.checklist,
-      reminderMinutesBefore:
-          reminderMinutesBefore ?? this.reminderMinutesBefore,
+      reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       estimatedDuration: estimatedDuration ?? this.estimatedDuration,
       completedAt:
           completedAt == _clear ? this.completedAt : completedAt as DateTime?,
@@ -126,7 +126,7 @@ class Task {
       'repeatRule': repeatRule,
       'color': color,
       'checklist': jsonEncode(checklist),
-      'reminderMinutesBefore': reminderMinutesBefore,
+      'reminderMinutes': jsonEncode(reminderMinutes),
       'estimatedDuration': estimatedDuration,
       'completedAt': completedAt?.millisecondsSinceEpoch,
       'createdAt': createdAt.millisecondsSinceEpoch,
@@ -143,6 +143,22 @@ class Task {
           .toList();
     } else if (checklistValue is List) {
       parsedChecklist = checklistValue.map((e) => e.toString()).toList();
+    }
+
+    dynamic reminderValue = map['reminderMinutes'];
+    List<int> parsedReminders = [];
+    if (reminderValue is String && reminderValue.isNotEmpty) {
+      parsedReminders = (jsonDecode(reminderValue) as List)
+          .map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0)
+          .toList();
+    } else if (reminderValue is List) {
+      parsedReminders =
+          reminderValue.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0).toList();
+    } else if (reminderValue == null && map['reminderMinutesBefore'] != null) {
+      final oldVal = map['reminderMinutesBefore'];
+      if (oldVal is int && oldVal > 0) {
+        parsedReminders = [oldVal];
+      }
     }
 
     final createdAt = map['createdAt'] != null
@@ -170,7 +186,7 @@ class Task {
       repeatRule: map['repeatRule'] ?? 'Never',
       color: map['color'] ?? '',
       checklist: parsedChecklist,
-      reminderMinutesBefore: map['reminderMinutesBefore'] ?? 0,
+      reminderMinutes: parsedReminders,
       estimatedDuration: map['estimatedDuration'] ?? '',
       completedAt:
           map['completedAt'] != null ? _parseDate(map['completedAt']) : null,
