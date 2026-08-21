@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_helper.dart';
 import '../models/category_model.dart';
+import '../models/habit_log_item.dart';
 import '../models/habit_model.dart';
 import '../models/task_model.dart';
 import '../services/home_widget_service.dart';
@@ -306,6 +307,73 @@ final habitLogsProvider =
   return dbHelper.getHabitLogs(habitId);
 });
 
+String habitLogIdFor(String habitId, DateTime date) {
+  final m = date.month.toString().padLeft(2, '0');
+  final d = date.day.toString().padLeft(2, '0');
+  return '$habitId-${date.year}-$m-$d';
+}
+
+final habitLogItemsProvider = StateNotifierProvider.family<
+    HabitLogItemsNotifier,
+    List<HabitLogItem>,
+    String>((ref, logId) {
+  final dbHelper = ref.watch(databaseProvider);
+  return HabitLogItemsNotifier(dbHelper, logId);
+});
+
+class HabitLogItemsNotifier extends StateNotifier<List<HabitLogItem>> {
+  final DatabaseHelper dbHelper;
+  final String logId;
+
+  HabitLogItemsNotifier(this.dbHelper, this.logId) : super(const []) {
+    load();
+  }
+
+  Future<void> load() async {
+    try {
+      state = await dbHelper.getHabitLogItems(logId);
+    } catch (e) {
+      debugPrint('Error loading habit log items: $e');
+    }
+  }
+
+  Future<void> addItem(String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      final item =
+          HabitLogItem(logId: logId, text: trimmed, position: state.length);
+      await dbHelper.createHabitLogItem(item);
+      state = [...state, item];
+    } catch (e) {
+      debugPrint('Error adding habit log item: $e');
+    }
+  }
+
+  Future<void> updateItemText(HabitLogItem item, String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      final updated = item.copyWith(text: trimmed);
+      await dbHelper.updateHabitLogItem(updated);
+      state = [
+        for (final it in state) if (it.id == item.id) updated else it
+      ];
+    } catch (e) {
+      debugPrint('Error updating habit log item: $e');
+    }
+  }
+
+  Future<void> deleteItem(HabitLogItem item) async {
+    try {
+      await dbHelper.deleteHabitLogItem(item.id);
+      state = state.where((it) => it.id != item.id).toList();
+    } catch (e) {
+      debugPrint('Error deleting habit log item: $e');
+    }
+  }
+}
+
 final habitsProvider =
     StateNotifierProvider<HabitNotifier, AsyncValue<List<Habit>>>((ref) {
   final dbHelper = ref.watch(databaseProvider);
@@ -440,7 +508,8 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       final moment = now ?? DateTime.now();
       final updatedHabit = habit.markCompleted(now: moment);
       await dbHelper.updateHabit(updatedHabit);
-      await dbHelper.logHabitCompletion(habitId, moment.toIso8601String());
+      await dbHelper.logHabitCompletion(
+          habitId, habitLogIdFor(habitId, moment));
 
       final habits = _currentHabits;
       final index = habits.indexWhere((h) => h.id == habitId);

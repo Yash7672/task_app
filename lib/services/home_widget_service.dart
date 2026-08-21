@@ -32,8 +32,8 @@ class HomeWidgetService {
         .where((t) =>
             !t.isDeleted &&
             !t.isArchived &&
-            DateTime(t.dueDate.year, t.dueDate.month, t.dueDate.day)
-                .isAtSameMomentAs(today))
+            !today.isBefore(
+                DateTime(t.dueDate.year, t.dueDate.month, t.dueDate.day)))
         .toList();
     _scheduleFlush();
   }
@@ -41,6 +41,25 @@ class HomeWidgetService {
   static void refreshHabits(int bestStreak) {
     _bestStreak = bestStreak;
     _scheduleFlush();
+  }
+
+  static Future<void> pushNow() async {
+    if (kIsWeb) return;
+    await init();
+    await _flush();
+  }
+
+  static Future<void> requestPinWidget() async {
+    if (kIsWeb) return;
+    try {
+      await init();
+      await HomeWidget.requestPinWidget(
+        androidName: 'PyloHomeWidgetProvider',
+        qualifiedAndroidName: _androidProviderName,
+      );
+    } catch (e) {
+      debugPrint('HomeWidget pin request failed: $e');
+    }
   }
 
   static void _scheduleFlush() {

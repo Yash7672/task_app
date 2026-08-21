@@ -7,6 +7,7 @@ class PinPad extends StatefulWidget {
   final ValueChanged<String> onPinCompleted;
   final VoidCallback? onBiometricRequested;
   final bool showBiometric;
+  final IconData biometricIcon;
 
   const PinPad({
     super.key,
@@ -15,6 +16,7 @@ class PinPad extends StatefulWidget {
     required this.onPinCompleted,
     this.onBiometricRequested,
     this.showBiometric = false,
+    this.biometricIcon = Icons.fingerprint,
   });
 
   @override
@@ -124,7 +126,7 @@ class _PinPadState extends State<PinPad> {
                       children: [
                         if (widget.showBiometric)
                           _PadButton(
-                            icon: Icons.fingerprint,
+                            icon: widget.biometricIcon,
                             onTap: widget.onBiometricRequested ?? () {},
                           )
                         else

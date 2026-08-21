@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
+import '../../../models/habit_log_item.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
 
@@ -46,8 +47,18 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
   void _groupLogsByDate(List<Map<String, dynamic>> logs) {
     _logs = {};
     for (var log in logs) {
-      final dateStr = log['date'] as String;
-      final date = DateTime.parse(dateStr);
+      final raw = log['date'];
+      DateTime? date;
+      if (raw is String) {
+        date = DateTime.tryParse(raw) ??
+            DateTime.tryParse(raw.replaceFirst(' ', 'T'));
+        if (date == null && int.tryParse(raw) != null) {
+          date = DateTime.fromMillisecondsSinceEpoch(int.parse(raw));
+        }
+      } else if (raw is int) {
+        date = DateTime.fromMillisecondsSinceEpoch(raw);
+      }
+      if (date == null) continue;
       final dateOnly = DateTime(date.year, date.month, date.day);
 
       if (!_logs.containsKey(dateOnly)) {
@@ -264,6 +275,9 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
   Widget _buildDayDetails(DateTime date) {
     final logs = _logs[date]!;
     final formattedDate = '${date.day}/${date.month}/${date.year}';
+    final logId = habitLogIdFor(widget.habit.id, date);
+    final items = ref.watch(habitLogItemsProvider(logId));
+    final itemsNotifier = ref.read(habitLogItemsProvider(logId).notifier);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -279,25 +293,73 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
             '📅 $formattedDate',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text('Completed ${logs.length} time${logs.length > 1 ? 's' : ''}'),
-          if (logs.length > 1)
-            Row(
-              children: [
-                const Text('🔥'),
-                const SizedBox(width: 4),
-                Text(
-                  '× ${logs.length}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
-                  ),
+          const SizedBox(height: 8),
+          if (items.isEmpty)
+            Text(
+              'No checklist entries for this day.',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            )
+          else
+            ...items.map(
+              (item) => ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.check_circle_outline,
+                    color: Colors.green, size: 20),
+                title: Text(item.text, style: const TextStyle(fontSize: 14)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      tooltip: 'Edit',
+                      onPressed: () => _editItem(item, itemsNotifier),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete_outline,
+                          size: 18, color: Colors.red.shade400),
+                      tooltip: 'Delete',
+                      onPressed: () => itemsNotifier.deleteItem(item),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
         ],
       ),
     );
+  }
+
+  Future<void> _editItem(
+      HabitLogItem item, HabitLogItemsNotifier notifier) async {
+    final controller = TextEditingController(text: item.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit entry'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(labelText: 'What did you do?'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && result.trim().isNotEmpty) {
+      await notifier.updateItemText(item, result);
+    }
   }
 
   Widget _buildStatItem(String label, String value, Color color) {

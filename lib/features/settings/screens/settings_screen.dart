@@ -12,6 +12,7 @@ import '../../../providers/task_provider.dart';
 import '../../../services/backup/backup_service.dart';
 import '../../../services/backup/restore_service.dart';
 import '../../../services/notification_service.dart';
+import '../../../services/home_widget_service.dart';
 import '../../categories/screens/manage_categories_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 
@@ -233,6 +234,19 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               children: [
                 ListTile(
+                  title: const Text('Add home screen widget'),
+                  subtitle:
+                      const Text('Pin the PYLO widget to your home screen'),
+                  leading: const Icon(Icons.widgets_outlined),
+                  onTap: () async {
+                    await HomeWidgetService.requestPinWidget();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'If nothing appeared, add it from your launcher\'s widget menu.')));
+                  },
+                ),
+                ListTile(
                   title: const Text('Export Backup'),
                   subtitle: const Text('Save a .pylobackup file anywhere you choose'),
                   leading: const Icon(Icons.backup_outlined),
@@ -316,6 +330,7 @@ class SettingsScreen extends ConsumerWidget {
 
   Future<void> _toggleAppLock(
       BuildContext context, WidgetRef ref, bool enable) async {
+    final security = ref.read(securityProvider);
     if (enable) {
       final pin = await _promptPin(context, 'Set a 4-digit PIN');
       if (pin == null) return;
@@ -325,21 +340,109 @@ class SettingsScreen extends ConsumerWidget {
             const SnackBar(content: Text('App Lock enabled')));
       }
     } else {
+      // Require the current PIN before the lock can be removed.
+      if (security.hasPin) {
+        final pin = await _promptPin(context, 'Enter current PIN to disable');
+        if (pin == null) return;
+        final ok = await ref.read(securityProvider.notifier).verifyPin(pin);
+        if (!ok) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Current PIN was incorrect'),
+                backgroundColor: Colors.red));
+          }
+          return;
+        }
+      }
       await ref.read(securityProvider.notifier).disableAppLock();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('App Lock disabled')));
+      }
     }
   }
 
   Future<void> _changePin(BuildContext context, WidgetRef ref) async {
-    final oldPin = await _promptPin(context, 'Enter current PIN');
-    if (oldPin == null || !context.mounted) return;
-    final newPin = await _promptPin(context, 'Enter new 4-digit PIN');
-    if (newPin == null) return;
+    final security = ref.read(securityProvider);
 
-    final ok =
-        await ref.read(securityProvider.notifier).changePin(oldPin, newPin);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ok ? 'PIN updated' : 'Current PIN was incorrect')));
+    String? oldPin;
+    if (security.hasPin) {
+      // Ask for the current PIN, retrying until correct or cancelled.
+      while (true) {
+        if (!context.mounted) return;
+        final entered = await _promptPin(context, 'Enter current PIN');
+        if (entered == null) return;
+        final ok =
+            await ref.read(securityProvider.notifier).verifyPin(entered);
+        if (ok) {
+          oldPin = entered;
+          break;
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Current PIN is incorrect. Try again.'),
+              backgroundColor: Colors.red));
+        }
+      }
+    }
+
+    if (!context.mounted) return;
+
+    // New PIN + confirmation so a typo can never lock the user out.
+    String? newPin;
+    while (true) {
+      if (!context.mounted) return;
+      final first = await _promptPin(context, 'Enter new 4-digit PIN');
+      if (first == null) return;
+      if (oldPin != null && first == oldPin) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content:
+                  Text('New PIN must be different from the current one'),
+              backgroundColor: Colors.orange));
+        }
+        continue;
+      }
+      if (!context.mounted) return;
+      final confirm = await _promptPin(context, 'Confirm new PIN');
+      if (confirm == null) return;
+      if (confirm != first) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('PINs did not match. Try again.'),
+              backgroundColor: Colors.orange));
+        }
+        continue;
+      }
+      newPin = confirm;
+      break;
+    }
+    if (!context.mounted) return;
+
+    final String result;
+    if (oldPin == null) {
+      // No stored PIN (recovery path) — just set a fresh one.
+      await ref.read(securityProvider.notifier).enableAppLock(newPin);
+      result = 'ok';
+    } else {
+      result =
+          await ref.read(securityProvider.notifier).changePin(oldPin, newPin);
+    }
+
+    if (!context.mounted) return;
+    switch (result) {
+      case 'ok':
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('PIN updated'),
+            backgroundColor: Colors.green));
+      case 'wrong_pin':
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Current PIN was incorrect'),
+            backgroundColor: Colors.red));
+      default:
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not update PIN — secure storage error'),
+            backgroundColor: Colors.red));
     }
   }
 

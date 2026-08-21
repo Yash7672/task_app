@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
+import 'habit_complete_sheet.dart';
 import 'habit_detail_popup.dart';
 
-class HabitCard extends ConsumerStatefulWidget {
+class HabitCard extends ConsumerWidget {
   final Habit habit;
 
   const HabitCard({
@@ -13,15 +14,7 @@ class HabitCard extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState createState() => _HabitCardState();
-}
-
-class _HabitCardState extends ConsumerState<HabitCard> {
-  bool _isCompleting = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final habit = widget.habit;
+  Widget build(BuildContext context, WidgetRef ref) {
     final isCompletedToday = habit.isCompletedToday;
     final streakEmoji = _getStreakEmoji(habit.currentStreak);
     final streakColor = _getStreakColor(habit.currentStreak);
@@ -38,7 +31,7 @@ class _HabitCardState extends ConsumerState<HabitCard> {
               : BorderSide(color: Colors.grey.shade200, width: 1.2),
         ),
         child: InkWell(
-          onTap: () => _showDetailPopup(context),
+          onTap: () => _showDetailPopup(context, habit),
           borderRadius: BorderRadius.circular(22),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -102,27 +95,8 @@ class _HabitCardState extends ConsumerState<HabitCard> {
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: isCompletedToday || _isCompleting
-                            ? null
-                            : () async {
-                                setState(() => _isCompleting = true);
-                                final messenger = ScaffoldMessenger.of(context);
-                                final updated = await ref
-                                    .read(habitsProvider.notifier)
-                                    .completeToday(habit.id);
-                                if (!mounted) return;
-                                setState(() => _isCompleting = false);
-                                if (updated != null) {
-                                  final milestoneMessage = _getMilestoneMessage(
-                                      updated.currentStreak);
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(milestoneMessage),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                }
-                              },
+                        onPressed: () =>
+                            showHabitCompleteSheet(context, ref, habit),
                         icon: Icon(isCompletedToday
                             ? Icons.check_circle
                             : Icons.check),
@@ -142,13 +116,15 @@ class _HabitCardState extends ConsumerState<HabitCard> {
                     ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
-                      onPressed: () => _showEditHabitDialog(context, habit),
+                      onPressed: () =>
+                          _showEditHabitDialog(context, ref, habit),
                       icon: const Icon(Icons.edit_outlined),
                       tooltip: 'Edit',
                     ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
-                      onPressed: () => _showDeleteConfirmation(context, habit),
+                      onPressed: () =>
+                          _showDeleteConfirmation(context, ref, habit),
                       icon: const Icon(Icons.delete_outline),
                       tooltip: 'Delete',
                     ),
@@ -162,10 +138,10 @@ class _HabitCardState extends ConsumerState<HabitCard> {
     );
   }
 
-  void _showDetailPopup(BuildContext context) {
+  void _showDetailPopup(BuildContext context, Habit habit) {
     showDialog(
       context: context,
-      builder: (context) => HabitDetailPopup(habit: widget.habit),
+      builder: (context) => HabitDetailPopup(habit: habit),
     );
   }
 
@@ -222,26 +198,8 @@ class _HabitCardState extends ConsumerState<HabitCard> {
     return Colors.grey;
   }
 
-  String _getMilestoneMessage(int streak) {
-    if (streak == 7) {
-      return '🎉 7-day streak unlocked!';
-    }
-    if (streak == 30) {
-      return '🔥 30-day streak unlocked!';
-    }
-    if (streak == 50) {
-      return '🏆 50-day streak unlocked!';
-    }
-    if (streak == 100) {
-      return '💎 100-day streak unlocked!';
-    }
-    if (streak == 365) {
-      return '🌟 365-day streak unlocked!';
-    }
-    return '🔥 +1 day! Keep going!';
-  }
-
-  Future<void> _showEditHabitDialog(BuildContext context, Habit habit) async {
+  Future<void> _showEditHabitDialog(
+      BuildContext context, WidgetRef ref, Habit habit) async {
     final messenger = ScaffoldMessenger.of(context);
     final nameController = TextEditingController(text: habit.name);
     final descriptionController =
@@ -305,7 +263,7 @@ class _HabitCardState extends ConsumerState<HabitCard> {
   }
 
   Future<void> _showDeleteConfirmation(
-      BuildContext context, Habit habit) async {
+      BuildContext context, WidgetRef ref, Habit habit) async {
     final messenger = ScaffoldMessenger.of(context);
     final confirm = await showDialog<bool>(
       context: context,

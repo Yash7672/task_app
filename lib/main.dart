@@ -11,6 +11,7 @@ import 'core/utils/startup_benchmark.dart';
 import 'database/database_helper.dart';
 import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/settings_provider.dart';
+import 'services/home_widget_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -73,6 +74,14 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
       }
       StartupBenchmark
           .mark('notifications_initialized (${sw.elapsedMilliseconds}ms)');
+    }
+
+    if (!kIsWeb) {
+      try {
+        await HomeWidgetService.pushNow();
+      } catch (e) {
+        debugPrint('HomeWidget init failed: $e');
+      }
     }
 
     if (kDebugMode) {

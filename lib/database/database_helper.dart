@@ -5,6 +5,7 @@ import '../models/birthday_model.dart';
 import '../models/category_model.dart';
 import '../models/checklist_model.dart';
 import '../models/focus_session_model.dart';
+import '../models/habit_log_item.dart';
 import '../models/habit_model.dart';
 import '../models/task_model.dart';
 
@@ -14,7 +15,7 @@ class DatabaseHelper {
   static Database? _database;
   static String? _cachedDbPath;
 
-  static const int schemaVersion = 5;
+  static const int schemaVersion = 6;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -103,6 +104,22 @@ class DatabaseHelper {
     if (oldVersion < 5) {
       await _createV5Tables(db);
     }
+    if (oldVersion < 6) {
+      await _createV6Tables(db);
+    }
+  }
+
+  Future<void> _createV6Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS habit_log_items (
+        id TEXT PRIMARY KEY,
+        logId TEXT NOT NULL,
+        text TEXT NOT NULL,
+        position INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_habit_log_items_logId ON habit_log_items(logId)');
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -463,14 +480,14 @@ class DatabaseHelper {
     return result.map((json) => Habit.fromMap(json)).toList();
   }
 
-  Future<void> logHabitCompletion(String habitId, String date) async {
+  Future<void> logHabitCompletion(String habitId, String dateKey) async {
     final db = await database;
     await db.insert(
       'habit_logs',
       {
-        'id': '$habitId-$date',
+        'id': '$habitId-$dateKey',
         'habitId': habitId,
-        'date': date,
+        'date': dateKey,
         'isCompleted': 1
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -489,6 +506,10 @@ class DatabaseHelper {
 
   Future<int> deleteHabit(String id) async {
     final db = await database;
+    await db.execute(
+      'DELETE FROM habit_log_items WHERE logId LIKE ?',
+      ['$id-%'],
+    );
     await db.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
     return db.delete('habits', where: 'id = ?', whereArgs: [id]);
   }
@@ -497,6 +518,39 @@ class DatabaseHelper {
     final db = await database;
     return db.query('habit_logs',
         where: 'habitId = ?', whereArgs: [habitId], orderBy: 'date DESC');
+  }
+
+  Future<HabitLogItem> createHabitLogItem(HabitLogItem item) async {
+    final db = await database;
+    await db.insert('habit_log_items', item.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    return item;
+  }
+
+  Future<List<HabitLogItem>> getHabitLogItems(String logId) async {
+    final db = await database;
+    final result = await db.query(
+      'habit_log_items',
+      where: 'logId = ?',
+      whereArgs: [logId],
+      orderBy: 'position ASC',
+    );
+    return result.map(HabitLogItem.fromMap).toList();
+  }
+
+  Future<int> updateHabitLogItem(HabitLogItem item) async {
+    final db = await database;
+    return db.update(
+      'habit_log_items',
+      item.toMap(),
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
+  }
+
+  Future<int> deleteHabitLogItem(String id) async {
+    final db = await database;
+    return db.delete('habit_log_items', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<Checklist> createChecklist(Checklist checklist) async {
@@ -667,6 +721,7 @@ class DatabaseHelper {
       'categories',
       'habits',
       'habit_logs',
+      'habit_log_items',
       'checklists',
       'checklist_items',
       'birthdays',

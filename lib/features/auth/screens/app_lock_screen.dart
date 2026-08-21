@@ -17,14 +17,22 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     with WidgetsBindingObserver {
   String? _errorText;
   bool _authenticating = false;
+  IconData _biometricIcon = Icons.fingerprint;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadBiometricIcon();
       _maybeAutoBiometric();
     });
+  }
+
+  Future<void> _loadBiometricIcon() async {
+    final face = await BiometricService.prefersFace();
+    if (!mounted) return;
+    setState(() => _biometricIcon = face ? Icons.face : Icons.fingerprint);
   }
 
   @override
@@ -44,6 +52,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
         security.onAppResumed();
         if (ref.read(securityProvider).requiresAuth) {
           setState(() => _errorText = null);
+          _loadBiometricIcon();
           _maybeAutoBiometric();
         }
       default:
@@ -113,6 +122,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
         onPinCompleted: _onPinEntered,
         showBiometric: security.shouldOfferBiometric,
         onBiometricRequested: _authenticateWithBiometric,
+        biometricIcon: _biometricIcon,
       ),
     );
   }

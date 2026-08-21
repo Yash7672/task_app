@@ -28,6 +28,21 @@ class BiometricService {
     }
   }
 
+  /// True when face recognition is the enrolled biometric (e.g. Face ID),
+  /// used to pick the right icon on the lock screen.
+  static Future<bool> prefersFace() async {
+    if (kIsWeb) return false;
+    try {
+      final list = await _auth.getAvailableBiometrics();
+      final hasFace = list.contains(BiometricType.face);
+      final hasFingerprint = list.contains(BiometricType.fingerprint);
+      return hasFace && !hasFingerprint;
+    } catch (e) {
+      debugPrint('Biometric type check failed: $e');
+      return false;
+    }
+  }
+
   static Future<bool> authenticate({required String reason}) async {
     if (kIsWeb) return false;
     try {

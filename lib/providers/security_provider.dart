@@ -83,11 +83,22 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final hasPin = await PinService.hasPin();
+      final appLockEnabled = prefs.getBool('app_lock_enabled') ?? false;
+
+      // Self-heal: if the PIN was lost (keystore reset / storage migration)
+      // while App Lock was on, turn the lock off so the user can set a
+      // fresh PIN instead of being permanently locked out.
+      if (appLockEnabled && !hasPin) {
+        await prefs.setBool('app_lock_enabled', false);
+        await prefs.setBool('biometric_enabled', false);
+        debugPrint('App Lock self-healed: stored PIN missing');
+      }
+
       final biometricAvailable = await BiometricService.isAvailable();
 
       state = state.copyWith(
         isLoading: false,
-        appLockEnabled: prefs.getBool('app_lock_enabled') ?? false,
+        appLockEnabled: appLockEnabled && hasPin,
         biometricEnabled: prefs.getBool('biometric_enabled') ?? false,
         biometricAvailable: biometricAvailable,
         hasPin: hasPin,
@@ -132,12 +143,16 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     state = state.copyWith(biometricEnabled: enabled);
   }
 
-  Future<bool> changePin(String oldPin, String newPin) async {
+  /// Returns 'ok', 'wrong_pin' or 'error'.
+  Future<String> changePin(String oldPin, String newPin) async {
     try {
       await PinService.changePin(oldPin, newPin);
-      return true;
-    } catch (_) {
-      return false;
+      return 'ok';
+    } on WrongPinException {
+      return 'wrong_pin';
+    } catch (e) {
+      debugPrint('Change PIN failed: $e');
+      return 'error';
     }
   }
 

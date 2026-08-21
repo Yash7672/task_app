@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../features/calendar/screens/calendar_screen.dart';
+import '../features/checklist/screens/checklist_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/more/screens/more_screen.dart';
 import '../features/streaks/screens/streaks_screen.dart';
@@ -19,6 +20,7 @@ class _AppNavigationState extends State<AppNavigation> {
     TaskListScreen(),
     CalendarScreen(),
     StreaksScreen(),
+    ChecklistScreen(),
     MoreScreen(),
   ];
 
@@ -49,6 +51,10 @@ class _AppNavigationState extends State<AppNavigation> {
               icon: Icon(Icons.local_fire_department_outlined),
               selectedIcon: Icon(Icons.local_fire_department),
               label: 'Habits'),
+          NavigationDestination(
+              icon: Icon(Icons.checklist_rounded),
+              selectedIcon: Icon(Icons.checklist),
+              label: 'Lists'),
           NavigationDestination(
               icon: Icon(Icons.apps_outlined),
               selectedIcon: Icon(Icons.apps),

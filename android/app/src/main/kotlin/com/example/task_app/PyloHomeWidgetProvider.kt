@@ -28,7 +28,7 @@ class PyloHomeWidgetProvider : HomeWidgetProvider() {
 
                 setTextViewText(
                     R.id.widget_header,
-                    "PYLO \u2022 Today ($doneCount done)"
+                    "PYLO \u2022 Tasks ($doneCount done)"
                 )
 
                 val taskIds = intArrayOf(
