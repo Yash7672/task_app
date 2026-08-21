@@ -5,6 +5,7 @@ import '../models/birthday_model.dart';
 import '../models/category_model.dart';
 import '../models/checklist_model.dart';
 import '../models/focus_session_model.dart';
+import '../models/habit_completion_item.dart';
 import '../models/habit_log_item.dart';
 import '../models/habit_model.dart';
 import '../models/task_model.dart';
@@ -15,7 +16,7 @@ class DatabaseHelper {
   static Database? _database;
   static String? _cachedDbPath;
 
-  static const int schemaVersion = 6;
+  static const int schemaVersion = 7;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -107,6 +108,45 @@ class DatabaseHelper {
     if (oldVersion < 6) {
       await _createV6Tables(db);
     }
+    if (oldVersion < 7) {
+      await _createV7Tables(db);
+    }
+  }
+
+  /// v7 adds the immutable per-day completion checklist history.
+  ///
+  /// Existing habit_log_items rows are copied in as completed snapshots so no
+  /// history is lost during the upgrade. The migration is idempotent: rows are
+  /// re-inserted with their original ids (INSERT OR REPLACE).
+  Future<void> _createV7Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS habit_completion_items (
+        id TEXT PRIMARY KEY,
+        habitId TEXT NOT NULL,
+        completionDate TEXT NOT NULL,
+        text TEXT NOT NULL,
+        completed INTEGER DEFAULT 1,
+        position INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_habit_completion_items_habit_date '
+        'ON habit_completion_items(habitId, completionDate)');
+
+    // Migrate legacy daily log entries ('{habitId}-yyyy-MM-dd' logIds) into
+    // the snapshot table. The date is always the trailing 10 characters.
+    await db.execute('''
+      INSERT OR REPLACE INTO habit_completion_items
+        (id, habitId, completionDate, text, completed, position)
+      SELECT id,
+        substr(logId, 1, length(logId) - 11),
+        substr(logId, length(logId) - 9),
+        text,
+        1,
+        position
+      FROM habit_log_items
+      WHERE length(logId) >= 12
+    ''');
   }
 
   Future<void> _createV6Tables(Database db) async {
@@ -243,6 +283,8 @@ class DatabaseHelper {
     ''');
 
     await _createV5Tables(db);
+    await _createV6Tables(db);
+    await _createV7Tables(db);
 
     final defaultCategories = [
       {'id': '1', 'name': 'Personal', 'colorHex': '#4CAF50', 'icon': '🧘'},
@@ -510,6 +552,8 @@ class DatabaseHelper {
       'DELETE FROM habit_log_items WHERE logId LIKE ?',
       ['$id-%'],
     );
+    await db.delete('habit_completion_items',
+        where: 'habitId = ?', whereArgs: [id]);
     await db.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
     return db.delete('habits', where: 'id = ?', whereArgs: [id]);
   }
@@ -518,6 +562,43 @@ class DatabaseHelper {
     final db = await database;
     return db.query('habit_logs',
         where: 'habitId = ?', whereArgs: [habitId], orderBy: 'date DESC');
+  }
+
+  /// Replaces the completion checklist snapshot for [habitId] on [dateKey]
+  /// ('yyyy-MM-dd'). Called once, at the moment the habit is completed.
+  Future<void> saveCompletionChecklist(
+    String habitId,
+    String dateKey,
+    List<HabitCompletionItem> items,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'habit_completion_items',
+        where: 'habitId = ? AND completionDate = ?',
+        whereArgs: [habitId, dateKey],
+      );
+      for (final item in items) {
+        await txn.insert('habit_completion_items', item.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
+
+  /// Returns the checklist snapshotted when the habit was completed on
+  /// [dateKey]. Empty if no checklist was recorded that day.
+  Future<List<HabitCompletionItem>> getCompletionChecklist(
+    String habitId,
+    String dateKey,
+  ) async {
+    final db = await database;
+    final result = await db.query(
+      'habit_completion_items',
+      where: 'habitId = ? AND completionDate = ?',
+      whereArgs: [habitId, dateKey],
+      orderBy: 'position ASC',
+    );
+    return result.map(HabitCompletionItem.fromMap).toList();
   }
 
   Future<HabitLogItem> createHabitLogItem(HabitLogItem item) async {
@@ -722,6 +803,7 @@ class DatabaseHelper {
       'habits',
       'habit_logs',
       'habit_log_items',
+      'habit_completion_items',
       'checklists',
       'checklist_items',
       'birthdays',

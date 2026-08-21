@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../../../models/habit_log_item.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
+import 'habit_day_detail_sheet.dart';
 
+/// Streak History view for a single habit: a calendar where every completed
+/// day is marked with a 🔥. Tapping a 🔥 day opens that day's snapshotted
+/// checklist; tapping any other day explains the habit was not completed.
 class HabitDetailPopup extends ConsumerStatefulWidget {
   final Habit habit;
 
@@ -20,56 +23,50 @@ class HabitDetailPopup extends ConsumerStatefulWidget {
 class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  Map<DateTime, List<Map<String, dynamic>>> _logs = {};
-  bool _isLoading = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadLogs();
+  /// Accepts both legacy keys ('{habitId}-yyyy-MM-dd') and plain
+  /// 'yyyy-MM-dd' keys — the date is always the trailing 10 characters.
+  DateTime? _parseDateKey(dynamic raw) {
+    if (raw is! String || raw.length < 10) return null;
+    return DateTime.tryParse(raw.substring(raw.length - 10));
   }
 
-  Future<void> _loadLogs() async {
-    setState(() => _isLoading = true);
-    try {
-      final logs = await ref.read(habitLogsProvider(widget.habit.id).future);
-      if (!mounted) return;
-      _groupLogsByDate(logs);
-    } catch (e) {
-      debugPrint('Error loading logs: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+  Set<DateTime> _completedDatesFrom(List<Map<String, dynamic>> logs) {
+    return {
+      for (final log in logs)
+        if (_parseDateKey(log['date']) case final DateTime date)
+          DateTime(date.year, date.month, date.day),
+    };
   }
 
-  void _groupLogsByDate(List<Map<String, dynamic>> logs) {
-    _logs = {};
-    for (var log in logs) {
-      final raw = log['date'];
-      DateTime? date;
-      if (raw is String) {
-        date = DateTime.tryParse(raw) ??
-            DateTime.tryParse(raw.replaceFirst(' ', 'T'));
-        if (date == null && int.tryParse(raw) != null) {
-          date = DateTime.fromMillisecondsSinceEpoch(int.parse(raw));
-        }
-      } else if (raw is int) {
-        date = DateTime.fromMillisecondsSinceEpoch(raw);
-      }
-      if (date == null) continue;
-      final dateOnly = DateTime(date.year, date.month, date.day);
+  Future<void> _handleDayTap(DateTime selectedDay, DateTime focusedDay) async {
+    setState(() {
+      _selectedDay = selectedDay;
+      _focusedDay = focusedDay;
+    });
 
-      if (!_logs.containsKey(dateOnly)) {
-        _logs[dateOnly] = [];
-      }
-      _logs[dateOnly]!.add(log);
+    final day =
+        DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
+    final logs = ref.read(habitLogsProvider(widget.habit.id)).value;
+    final isCompleted =
+        logs != null && _completedDatesFrom(logs).contains(day);
+
+    if (isCompleted) {
+      await showHabitDayDetailSheet(context, ref, widget.habit, day);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Habit not completed on this day.'),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final logsAsync = ref.watch(habitLogsProvider(widget.habit.id));
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
@@ -81,306 +78,127 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
             Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.habit.name,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (widget.habit.description.isNotEmpty)
-                        Text(
-                          widget.habit.description,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                    ],
+                  child: Text(
+                    widget.habit.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close),
+                  tooltip: 'Close',
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStatItem(
-                    '🔥 Current',
-                    '${widget.habit.currentStreak}',
-                    Colors.orange,
-                  ),
-                  _buildStatItem(
-                    '⭐ Best',
-                    '${widget.habit.bestStreak}',
-                    Colors.amber,
-                  ),
-                  _buildStatItem(
-                    '📊 Total',
-                    '${_logs.values.length}',
-                    Colors.blue,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_isLoading)
-              const Center(
+            logsAsync.when(
+              loading: () => const Center(
                 child: Padding(
                   padding: EdgeInsets.all(32),
                   child: CircularProgressIndicator(),
                 ),
-              )
-            else
-              TableCalendar(
-                firstDay: DateTime(2020),
-                lastDay: DateTime.now(),
-                focusedDay: _focusedDay,
-                selectedDayPredicate: (day) {
-                  return _selectedDay != null &&
-                      day.year == _selectedDay!.year &&
-                      day.month == _selectedDay!.month &&
-                      day.day == _selectedDay!.day;
-                },
-                calendarFormat: CalendarFormat.month,
-                startingDayOfWeek: StartingDayOfWeek.monday,
-                headerStyle: const HeaderStyle(
-                  formatButtonVisible: false,
-                  titleCentered: true,
-                ),
-                calendarStyle: CalendarStyle(
-                  todayDecoration: BoxDecoration(
-                    color: Colors.blue.shade100,
-                    shape: BoxShape.circle,
-                  ),
-                  selectedDecoration: const BoxDecoration(
-                    color: Colors.blue,
-                    shape: BoxShape.circle,
-                  ),
-                  markersMaxCount: 1,
-                ),
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                  });
-                },
-                calendarBuilders: CalendarBuilders(
-                  defaultBuilder: (context, date, _) {
-                    return _buildCalendarDay(date);
-                  },
-                  todayBuilder: (context, date, _) {
-                    return _buildCalendarDay(date, isToday: true);
-                  },
-                  selectedBuilder: (context, date, _) {
-                    return _buildCalendarDay(date, isSelected: true);
-                  },
+              ),
+              error: (error, _) => Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Could not load streak history.',
+                  style: TextStyle(color: colorScheme.error),
                 ),
               ),
-            const SizedBox(height: 16),
-            if (_selectedDay != null && _logs.containsKey(_selectedDay!))
-              _buildDayDetails(_selectedDay!),
-            const SizedBox(height: 8),
+              data: (logs) {
+                final completedDates = _completedDatesFrom(logs);
+                return TableCalendar(
+                  firstDay: DateTime(2020),
+                  lastDay: DateTime.now(),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                  calendarFormat: CalendarFormat.month,
+                  startingDayOfWeek: StartingDayOfWeek.monday,
+                  headerStyle: const HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                  ),
+                  onDaySelected: _handleDayTap,
+                  calendarBuilders: CalendarBuilders(
+                    defaultBuilder: (context, date, focusedDay) =>
+                        _buildDayCell(date, focusedDay, completedDates),
+                    todayBuilder: (context, date, focusedDay) => _buildDayCell(
+                        date, focusedDay, completedDates,
+                        isToday: true),
+                    selectedBuilder: (context, date, focusedDay) =>
+                        _buildDayCell(date, focusedDay, completedDates,
+                            isSelected: true),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCalendarDay(DateTime date,
-      {bool isToday = false, bool isSelected = false}) {
-    final dateOnly = DateTime(date.year, date.month, date.day);
-    final hasLogs = _logs.containsKey(dateOnly);
-    final logCount = hasLogs ? _logs[dateOnly]!.length : 0;
+  Widget _buildDayCell(
+    DateTime date,
+    DateTime focusedDay,
+    Set<DateTime> completedDates, {
+    bool isToday = false,
+    bool isSelected = false,
+  }) {
+    if (date.month != focusedDay.month || date.year != focusedDay.year) {
+      return const SizedBox.shrink();
+    }
 
+    final colorScheme = Theme.of(context).colorScheme;
     final isFuture = date.isAfter(DateTime.now());
+    final isCompleted = completedDates.contains(
+      DateTime(date.year, date.month, date.day),
+    );
+
+    Color? background;
+    if (isSelected) {
+      background = colorScheme.primary;
+    } else if (isToday) {
+      background = colorScheme.primaryContainer;
+    }
+
+    final numberColor = isSelected
+        ? colorScheme.onPrimary
+        : isFuture
+            ? colorScheme.outline.withValues(alpha: 0.4)
+            : colorScheme.onSurface;
 
     return Container(
-      margin: const EdgeInsets.all(4),
+      margin: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isSelected
-            ? Colors.blue
-            : isToday
-                ? Colors.blue.shade100
-                : null,
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(
-            child: Text(
-              '${date.day}',
-              style: TextStyle(
-                color: isSelected
-                    ? Colors.white
-                    : isFuture
-                        ? Colors.grey[400]
-                        : Colors.black87,
-                fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ),
-          if (hasLogs && !isFuture)
-            Positioned(
-              bottom: 2,
-              right: 2,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: logCount > 1 ? Colors.orange : Colors.green,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 2,
-                    ),
-                  ],
-                ),
-                child: logCount > 1
-                    ? Text(
-                        '🔥$logCount',
-                        style: const TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        '🔥',
-                        style: TextStyle(
-                          fontSize: 10,
-                        ),
-                      ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDayDetails(DateTime date) {
-    final logs = _logs[date]!;
-    final formattedDate = '${date.day}/${date.month}/${date.year}';
-    final logId = habitLogIdFor(widget.habit.id, date);
-    final items = ref.watch(habitLogItemsProvider(logId));
-    final itemsNotifier = ref.read(habitLogItemsProvider(logId).notifier);
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        color: background,
+        border: isToday && !isSelected
+            ? Border.all(color: colorScheme.primary, width: 1.4)
+            : null,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            '📅 $formattedDate',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            '${date.day}',
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.1,
+              color: numberColor,
+              fontWeight:
+                  isToday || isCompleted ? FontWeight.bold : FontWeight.normal,
+            ),
           ),
-          const SizedBox(height: 4),
-          Text('Completed ${logs.length} time${logs.length > 1 ? 's' : ''}'),
-          const SizedBox(height: 8),
-          if (items.isEmpty)
-            Text(
-              'No checklist entries for this day.',
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-            )
-          else
-            ...items.map(
-              (item) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.check_circle_outline,
-                    color: Colors.green, size: 20),
-                title: Text(item.text, style: const TextStyle(fontSize: 14)),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      tooltip: 'Edit',
-                      onPressed: () => _editItem(item, itemsNotifier),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.delete_outline,
-                          size: 18, color: Colors.red.shade400),
-                      tooltip: 'Delete',
-                      onPressed: () => itemsNotifier.deleteItem(item),
-                    ),
-                  ],
-                ),
-              ),
+          if (isCompleted && !isFuture)
+            const Text(
+              '🔥',
+              style: TextStyle(fontSize: 9, height: 1),
             ),
         ],
       ),
-    );
-  }
-
-  Future<void> _editItem(
-      HabitLogItem item, HabitLogItemsNotifier notifier) async {
-    final controller = TextEditingController(text: item.text);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit entry'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(labelText: 'What did you do?'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (result != null && result.trim().isNotEmpty) {
-      await notifier.updateItemText(item, result);
-    }
-  }
-
-  Widget _buildStatItem(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
     );
   }
 }

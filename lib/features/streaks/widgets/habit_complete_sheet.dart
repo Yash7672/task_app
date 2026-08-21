@@ -36,6 +36,14 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
 
   String get _todayLogId => habitLogIdFor(widget.habit.id, DateTime.now());
 
+  /// After any checklist change, refresh today's completion snapshot so the
+  /// streak history shows the latest entries for today (past days untouched).
+  Future<void> _syncSnapshot() async {
+    await ref
+        .read(habitsProvider.notifier)
+        .syncTodaySnapshot(widget.habit.id);
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -87,6 +95,7 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
       await ref
           .read(habitLogItemsProvider(_todayLogId).notifier)
           .updateItemText(item, result);
+      await _syncSnapshot();
     }
   }
 
@@ -96,6 +105,14 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
     final notifier = ref.read(habitLogItemsProvider(_todayLogId).notifier);
     final isCompletedToday = widget.habit.isCompletedToday;
     final theme = Theme.of(context);
+
+    void addItemAndSync(String value) {
+      notifier.addItem(value).then((_) => _syncSnapshot());
+    }
+
+    void deleteItemAndSync(HabitLogItem item) {
+      notifier.deleteItem(item).then((_) => _syncSnapshot());
+    }
 
     return Padding(
       padding:
@@ -118,7 +135,7 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
                       const SizedBox(height: 2),
                       Text(
                         isCompletedToday
-                            ? '✓ Completed today — tap to review your log'
+                            ? '✓ Completed today — add or edit entries anytime'
                             : 'What did you do today? (optional)',
                         style: TextStyle(
                             color: isCompletedToday
@@ -150,7 +167,7 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
                           borderRadius: BorderRadius.circular(14)),
                     ),
                     onSubmitted: (value) {
-                      notifier.addItem(value);
+                      addItemAndSync(value);
                       _controller.clear();
                     },
                   ),
@@ -158,7 +175,7 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
                 const SizedBox(width: 8),
                 IconButton.filled(
                   onPressed: () {
-                    notifier.addItem(_controller.text);
+                    addItemAndSync(_controller.text);
                     _controller.clear();
                   },
                   icon: const Icon(Icons.add),
@@ -201,7 +218,7 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
                           icon: Icon(Icons.delete_outline,
                               size: 20, color: Colors.red.shade400),
                           tooltip: 'Delete',
-                          onPressed: () => notifier.deleteItem(item),
+                          onPressed: () => deleteItemAndSync(item),
                         ),
                       ],
                     ),

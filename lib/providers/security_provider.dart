@@ -147,6 +147,7 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   Future<String> changePin(String oldPin, String newPin) async {
     try {
       await PinService.changePin(oldPin, newPin);
+      state = state.copyWith(hasPin: true);
       return 'ok';
     } on WrongPinException {
       return 'wrong_pin';
@@ -155,6 +156,34 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
       return 'error';
     }
   }
+
+  /// Returns 'ok', 'wrong_pin' or 'error'. Unlike [verifyPin], storage
+  /// failures surface as 'error' instead of looking like a wrong PIN.
+  Future<String> verifyPinStrict(String pin) async {
+    try {
+      final ok = await PinService.verifyPinStrict(pin);
+      return ok ? 'ok' : 'wrong_pin';
+    } catch (e) {
+      debugPrint('PIN verify failed: $e');
+      return 'error';
+    }
+  }
+
+  /// Re-checks whether the device has enrolled biometrics without touching
+  /// lock state (safe to call from Settings at any time).
+  Future<void> refreshBiometrics() async {
+    try {
+      final available = await BiometricService.isAvailable();
+      if (state.biometricAvailable != available) {
+        state = state.copyWith(biometricAvailable: available);
+      }
+    } catch (e) {
+      debugPrint('Biometric refresh failed: $e');
+    }
+  }
+
+  /// True when face recognition is the primary enrolled biometric.
+  Future<bool> prefersFaceBiometric() => BiometricService.prefersFace();
 
   Future<bool> verifyPin(String pin) async {
     return PinService.verifyPin(pin);

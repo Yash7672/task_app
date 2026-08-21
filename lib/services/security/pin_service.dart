@@ -44,6 +44,14 @@ class PinService {
     return stored != null && stored == pin;
   }
 
+  /// Like [verifyPin] but rethrows storage failures so callers can tell a
+  /// broken keystore apart from a genuinely wrong PIN (which otherwise looks
+  /// like an endless 'incorrect PIN' loop).
+  static Future<bool> verifyPinStrict(String pin) async {
+    final stored = await _storage.read(key: _pinKey);
+    return stored != null && stored == pin;
+  }
+
   static Future<bool> hasPin() async {
     final stored = await getPin();
     return stored != null && stored.isNotEmpty;

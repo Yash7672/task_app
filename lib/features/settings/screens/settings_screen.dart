@@ -68,19 +68,7 @@ class SettingsScreen extends ConsumerWidget {
                   onChanged: (value) => _toggleAppLock(context, ref, value),
                 ),
                 if (security.appLockEnabled) ...[
-                  SwitchListTile.adaptive(
-                    title: const Text('Biometric Unlock'),
-                    subtitle: Text(security.biometricAvailable
-                        ? 'Use fingerprint or face to unlock'
-                        : 'No biometrics available on this device'),
-                    value: security.biometricEnabled &&
-                        security.biometricAvailable,
-                    onChanged: security.biometricAvailable
-                        ? (value) => ref
-                            .read(securityProvider.notifier)
-                            .setBiometricEnabled(value)
-                        : null,
-                  ),
+                  const _BiometricTile(),
                   ListTile(
                     title: const Text('Change PIN'),
                     subtitle: const Text('Update your app lock PIN'),
@@ -372,17 +360,26 @@ class SettingsScreen extends ConsumerWidget {
         if (!context.mounted) return;
         final entered = await _promptPin(context, 'Enter current PIN');
         if (entered == null) return;
-        final ok =
-            await ref.read(securityProvider.notifier).verifyPin(entered);
-        if (ok) {
+        final result = await ref
+            .read(securityProvider.notifier)
+            .verifyPinStrict(entered);
+        if (result == 'ok') {
           oldPin = entered;
           break;
         }
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Current PIN is incorrect. Try again.'),
-              backgroundColor: Colors.red));
+        if (!context.mounted) return;
+        if (result == 'error') {
+          // Secure storage is broken — offer recovery instead of an
+          // endless 'incorrect PIN' loop.
+          final recover = await _offerStorageRecovery(context);
+          if (!context.mounted) return;
+          if (recover != true) return;
+          oldPin = null; // fall through to fresh-PIN setup below.
+          break;
         }
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Current PIN is incorrect. Try again.'),
+            backgroundColor: Colors.red));
       }
     }
 
@@ -446,33 +443,63 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-  Future<String?> _promptPin(BuildContext context, String title) async {
-    final controller = TextEditingController();
-    final pin = await showDialog<String>(
+  Future<bool> _offerStorageRecovery(BuildContext context) async {
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          obscureText: true,
-          maxLength: 4,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'PIN'),
-        ),
+        title: const Text('PIN storage problem'),
+        content: const Text(
+            'The saved PIN could not be read from secure storage. '
+            'You can set a new PIN now — it will replace the old one.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel')),
           FilledButton(
-            onPressed: () {
-              if (controller.text.length == 4) {
-                Navigator.pop(context, controller.text);
-              }
-            },
-            child: const Text('Save'),
-          ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Set new PIN')),
         ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<String?> _promptPin(BuildContext context, String title) async {
+    final controller = TextEditingController();
+    var canSave = controller.text.length == 4;
+    final pin = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            obscureText: true,
+            maxLength: 4,
+            autofocus: true,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) =>
+                setDialogState(() => canSave = controller.text.length == 4),
+            decoration: InputDecoration(
+              labelText: 'PIN',
+              helperText: 'Enter 4 digits',
+              errorText: controller.text.isEmpty
+                  ? null
+                  : (canSave ? null : 'PIN must be 4 digits'),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed:
+                  canSave ? () => Navigator.pop(dialogContext, controller.text) : null,
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
     controller.dispose();
@@ -586,5 +613,49 @@ class SettingsScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Backup failed: $e')));
     }
+  }
+}
+
+/// Biometric unlock toggle. Re-checks device biometric availability when it
+/// becomes visible (so enrolling face/fingerprint later works without an app
+/// restart) and names the enrolled method in the subtitle.
+class _BiometricTile extends ConsumerStatefulWidget {
+  const _BiometricTile();
+
+  @override
+  ConsumerState<_BiometricTile> createState() => _BiometricTileState();
+}
+
+class _BiometricTileState extends ConsumerState<_BiometricTile> {
+  bool _prefersFace = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() async {
+      await ref.read(securityProvider.notifier).refreshBiometrics();
+      final face =
+          await ref.read(securityProvider.notifier).prefersFaceBiometric();
+      if (mounted) setState(() => _prefersFace = face);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final security = ref.watch(securityProvider);
+    return SwitchListTile.adaptive(
+      title: const Text('Biometric Unlock'),
+      subtitle: Text(security.biometricAvailable
+          ? (_prefersFace
+              ? 'Use face recognition to unlock'
+              : 'Use fingerprint or face to unlock')
+          : 'No biometrics enrolled on this device'),
+      value: security.biometricEnabled && security.biometricAvailable,
+      onChanged: security.biometricAvailable
+          ? (value) => ref
+              .read(securityProvider.notifier)
+              .setBiometricEnabled(value)
+          : null,
+    );
   }
 }

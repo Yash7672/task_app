@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_helper.dart';
 import '../models/category_model.dart';
+import '../models/habit_completion_item.dart';
 import '../models/habit_log_item.dart';
 import '../models/habit_model.dart';
 import '../models/task_model.dart';
@@ -300,9 +301,8 @@ class CategoriesNotifier extends StateNotifier<AsyncValue<List<TaskCategory>>> {
   }
 }
 
-final habitLogsProvider =
-    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
-        (ref, habitId) async {
+final habitLogsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, habitId) async {
   final dbHelper = ref.watch(databaseProvider);
   return dbHelper.getHabitLogs(habitId);
 });
@@ -312,6 +312,27 @@ String habitLogIdFor(String habitId, DateTime date) {
   final d = date.day.toString().padLeft(2, '0');
   return '$habitId-${date.year}-$m-$d';
 }
+
+/// Plain 'yyyy-MM-dd' key used by habit_logs and completion history.
+String habitDateKey(DateTime date) {
+  final m = date.month.toString().padLeft(2, '0');
+  final d = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$m-$d';
+}
+
+/// Composite provider key for a day's completion checklist snapshot.
+String completionChecklistKey(String habitId, String dateKey) =>
+    '$habitId|$dateKey';
+
+final habitCompletionChecklistProvider =
+    FutureProvider.autoDispose.family<List<HabitCompletionItem>, String>(
+        (ref, key) async {
+  final separator = key.indexOf('|');
+  final habitId = key.substring(0, separator);
+  final dateKey = key.substring(separator + 1);
+  final dbHelper = ref.watch(databaseProvider);
+  return dbHelper.getCompletionChecklist(habitId, dateKey);
+});
 
 final habitLogItemsProvider = StateNotifierProvider.family<
     HabitLogItemsNotifier,
@@ -506,10 +527,31 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       }
 
       final moment = now ?? DateTime.now();
+      final dateKey = habitDateKey(moment);
       final updatedHabit = habit.markCompleted(now: moment);
       await dbHelper.updateHabit(updatedHabit);
-      await dbHelper.logHabitCompletion(
-          habitId, habitLogIdFor(habitId, moment));
+      await dbHelper.logHabitCompletion(habitId, dateKey);
+
+      // Snapshot this day's checklist into the immutable completion history.
+      // Later edits to today's log entries never rewrite previous days.
+      final logItems =
+          await dbHelper.getHabitLogItems(habitLogIdFor(habitId, moment));
+      if (logItems.isNotEmpty) {
+        await dbHelper.saveCompletionChecklist(
+          habitId,
+          dateKey,
+          [
+            for (var i = 0; i < logItems.length; i++)
+              HabitCompletionItem(
+                habitId: habitId,
+                completionDate: dateKey,
+                text: logItems[i].text,
+                completed: true,
+                position: i,
+              ),
+          ],
+        );
+      }
 
       final habits = _currentHabits;
       final index = habits.indexWhere((h) => h.id == habitId);
@@ -523,6 +565,46 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
     } catch (e) {
       debugPrint('Error logging habit: $e');
       return null;
+    }
+  }
+
+  /// Re-snapshots TODAY's completion checklist from the live log entries.
+  ///
+  /// Called when the user adds/edits/deletes entries after completing, so
+  /// "one more time" updates are reflected for today only. Previous days'
+  /// snapshots are never touched.
+  Future<void> syncTodaySnapshot(String habitId, {DateTime? now}) async {
+    try {
+      final moment = now ?? DateTime.now();
+      final dateKey = habitDateKey(moment);
+
+      final logs = await dbHelper.getHabitLogs(habitId);
+      final dayCompleted = logs.any((log) {
+        final raw = log['date'];
+        return raw is String &&
+            raw.length >= 10 &&
+            raw.substring(raw.length - 10) == dateKey;
+      });
+      if (!dayCompleted) return;
+
+      final logItems =
+          await dbHelper.getHabitLogItems(habitLogIdFor(habitId, moment));
+      await dbHelper.saveCompletionChecklist(
+        habitId,
+        dateKey,
+        [
+          for (var i = 0; i < logItems.length; i++)
+            HabitCompletionItem(
+              habitId: habitId,
+              completionDate: dateKey,
+              text: logItems[i].text,
+              completed: true,
+              position: i,
+            ),
+        ],
+      );
+    } catch (e) {
+      debugPrint('Error syncing habit snapshot: $e');
     }
   }
 }
