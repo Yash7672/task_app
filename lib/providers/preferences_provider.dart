@@ -4,17 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPreferences {
   final bool notificationsEnabled;
-  final bool appLockEnabled;
-  final String appLockPin;
   final List<int> reminderMinutes;
   final bool dailyReminderEnabled;
   final int dailyReminderHour;
   final int dailyReminderMinute;
+  final bool birthdayRemindersEnabled;
 
   SettingsPreferences({
     this.notificationsEnabled = true,
-    this.appLockEnabled = false,
-    this.appLockPin = '',
+    this.birthdayRemindersEnabled = true,
     List<int>? reminderMinutes,
     this.dailyReminderEnabled = false,
     this.dailyReminderHour = 20,
@@ -23,8 +21,7 @@ class SettingsPreferences {
 
   SettingsPreferences copyWith({
     bool? notificationsEnabled,
-    bool? appLockEnabled,
-    String? appLockPin,
+    bool? birthdayRemindersEnabled,
     List<int>? reminderMinutes,
     bool? dailyReminderEnabled,
     int? dailyReminderHour,
@@ -32,8 +29,8 @@ class SettingsPreferences {
   }) {
     return SettingsPreferences(
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
-      appLockEnabled: appLockEnabled ?? this.appLockEnabled,
-      appLockPin: appLockPin ?? this.appLockPin,
+      birthdayRemindersEnabled:
+          birthdayRemindersEnabled ?? this.birthdayRemindersEnabled,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       dailyReminderEnabled:
           dailyReminderEnabled ?? this.dailyReminderEnabled,
@@ -67,8 +64,8 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
     }
     state = SettingsPreferences(
       notificationsEnabled: prefs.getBool('notifications_enabled') ?? true,
-      appLockEnabled: prefs.getBool('app_lock_enabled') ?? false,
-      appLockPin: prefs.getString('app_lock_pin') ?? '',
+      birthdayRemindersEnabled:
+          prefs.getBool('birthday_reminders_enabled') ?? true,
       reminderMinutes: loadedReminders,
       dailyReminderEnabled:
           prefs.getBool('daily_reminder_enabled') ?? false,
@@ -83,16 +80,10 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
     await prefs.setBool('notifications_enabled', enabled);
   }
 
-  Future<void> setAppLockEnabled(bool enabled) async {
+  Future<void> setBirthdayRemindersEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    state = state.copyWith(appLockEnabled: enabled);
-    await prefs.setBool('app_lock_enabled', enabled);
-  }
-
-  Future<void> setAppLockPin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    state = state.copyWith(appLockPin: pin);
-    await prefs.setString('app_lock_pin', pin);
+    state = state.copyWith(birthdayRemindersEnabled: enabled);
+    await prefs.setBool('birthday_reminders_enabled', enabled);
   }
 
   Future<void> setReminderMinutes(List<int> minutes) async {

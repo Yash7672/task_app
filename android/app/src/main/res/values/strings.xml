@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PYLO</string>
+    <string name="pylo_widget_description">Shows today\'s tasks and your streak</string>
 </resources>

@@ -306,8 +306,23 @@ class TaskListItem extends ConsumerWidget {
                           .map((item) => ListTile(
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.check_circle_outline),
-                                title: Text(item),
+                                leading: Icon(
+                                  item.done
+                                      ? Icons.check_circle
+                                      : Icons.check_circle_outline,
+                                  color: item.done
+                                      ? theme.colorScheme.primary
+                                      : Colors.grey,
+                                ),
+                                title: Text(
+                                  item.text,
+                                  style: TextStyle(
+                                    decoration: item.done
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: item.done ? Colors.grey : null,
+                                  ),
+                                ),
                               ))
                           .toList(),
                     ),

@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_helper.dart';
+import '../models/category_model.dart';
 import '../models/habit_model.dart';
 import '../models/task_model.dart';
+import '../services/home_widget_service.dart';
+import '../core/utils/notification_helper.dart';
 import 'database_provider.dart';
 
 final taskProvider =
@@ -22,10 +25,19 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     try {
       state = const AsyncValue.loading();
       final tasks = await dbHelper.getAllTasks(includeArchived: true);
-      state = AsyncValue.data(tasks);
+      state = AsyncValue.data(_sortTasks(tasks));
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
+  }
+
+  List<Task> _sortTasks(List<Task> tasks) {
+    tasks.sort((a, b) {
+      if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
+      return a.dueDate.compareTo(b.dueDate);
+    });
+    return tasks;
   }
 
   List<Task> get _currentTasks => state.maybeWhen(
@@ -34,7 +46,8 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       );
 
   void _updateState(List<Task> tasks) {
-    state = AsyncValue.data(tasks);
+    state = AsyncValue.data(_sortTasks(tasks));
+    HomeWidgetService.refreshTasks(tasks);
   }
 
   Future<void> addTask(Task task) async {
@@ -122,12 +135,38 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     }
   }
 
-  Future<void> toggleTaskCompletion(Task task) async {
+  Future<void> toggleTaskCompletion(Task task,
+      {bool notificationsEnabled = true}) async {
+    final nowCompleted = !task.isCompleted;
     final updatedTask = task.copyWith(
-      isCompleted: !task.isCompleted,
-      completedAt: !task.isCompleted ? DateTime.now() : null,
+      isCompleted: nowCompleted,
+      completedAt: nowCompleted ? DateTime.now() : null,
     );
     await updateTask(updatedTask);
+
+    if (!nowCompleted) return;
+    if (task.repeatRule.toLowerCase() == 'never') return;
+
+    try {
+      final regenerated = task.regenerate();
+      await dbHelper.createTask(regenerated);
+
+      if (notificationsEnabled && regenerated.reminderMinutes.isNotEmpty) {
+        final taskDateTime = regenerated.startTime ??
+            DateTime(regenerated.dueDate.year, regenerated.dueDate.month,
+                regenerated.dueDate.day, 9, 0);
+        await NotificationHelper.scheduleTaskReminders(
+          taskId: regenerated.id,
+          taskTitle: regenerated.title,
+          taskDateTime: taskDateTime,
+          reminderMinutes: regenerated.reminderMinutes,
+        );
+      }
+
+      _updateState([..._currentTasks, regenerated]);
+    } catch (e) {
+      debugPrint('Error regenerating recurring task: $e');
+    }
   }
 
   Future<void> toggleFavorite(Task task) async {
@@ -203,6 +242,62 @@ final favoritesProvider = Provider<List<Task>>((ref) {
       .where((task) => task.isFavorite && !task.isArchived)
       .toList();
 });
+
+final categoriesProvider =
+    StateNotifierProvider<CategoriesNotifier, AsyncValue<List<TaskCategory>>>(
+        (ref) {
+  final dbHelper = ref.watch(databaseProvider);
+  return CategoriesNotifier(dbHelper);
+});
+
+class CategoriesNotifier extends StateNotifier<AsyncValue<List<TaskCategory>>> {
+  final DatabaseHelper dbHelper;
+
+  CategoriesNotifier(this.dbHelper) : super(const AsyncValue.loading()) {
+    loadCategories();
+  }
+
+  Future<void> loadCategories() async {
+    try {
+      final categories = await dbHelper.getAllCategories();
+      state = AsyncValue.data(categories);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  List<TaskCategory> get _current =>
+      state.maybeWhen(data: (c) => c, orElse: () => []);
+
+  Future<void> addCategory(TaskCategory category) async {
+    await dbHelper.createCategory(category);
+    state = AsyncValue.data([..._current, category]);
+  }
+
+  Future<void> updateCategory(TaskCategory category) async {
+    await dbHelper.updateCategory(category);
+    final list = _current;
+    final index = list.indexWhere((c) => c.id == category.id);
+    if (index != -1) {
+      final updated = List<TaskCategory>.from(list);
+      updated[index] = category;
+      state = AsyncValue.data(updated);
+    }
+  }
+
+  Future<bool> deleteCategory(TaskCategory category) async {
+    try {
+      await dbHelper.reassignTasksCategory(category.name, 'Personal');
+      await dbHelper.deleteCategory(category.id);
+      state =
+          AsyncValue.data(_current.where((c) => c.id != category.id).toList());
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting category: $e');
+      return false;
+    }
+  }
+}
 
 final habitLogsProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
@@ -287,6 +382,9 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
 
   void _updateState(List<Habit> habits) {
     state = AsyncValue.data(habits);
+    final best = habits.fold<int>(
+        0, (max, h) => h.currentStreak > max ? h.currentStreak : max);
+    HomeWidgetService.refreshHabits(best);
   }
 
   Future<void> loadHabits() async {

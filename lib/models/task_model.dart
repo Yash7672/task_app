@@ -1,6 +1,36 @@
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
+class ChecklistItemData {
+  final String text;
+  final bool done;
+
+  const ChecklistItemData({
+    required this.text,
+    this.done = false,
+  });
+
+  ChecklistItemData copyWith({String? text, bool? done}) {
+    return ChecklistItemData(
+      text: text ?? this.text,
+      done: done ?? this.done,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {'text': text, 'done': done ? 1 : 0};
+
+  factory ChecklistItemData.fromMap(Map<String, dynamic> map) {
+    return ChecklistItemData(
+      text: map['text']?.toString() ?? '',
+      done: map['done'] == 1 || map['done'] == true,
+    );
+  }
+
+  factory ChecklistItemData.fromString(String text) {
+    return ChecklistItemData(text: text);
+  }
+}
+
 class Task {
   static const _clear = Object();
 
@@ -20,7 +50,7 @@ class Task {
   final String notes;
   final String repeatRule;
   final String color;
-  final List<String> checklist;
+  final List<ChecklistItemData> checklist;
   final List<int> reminderMinutes;
   final String estimatedDuration;
   final DateTime? completedAt;
@@ -44,7 +74,7 @@ class Task {
     this.notes = '',
     this.repeatRule = 'Never',
     this.color = '',
-    List<String>? checklist,
+    List<ChecklistItemData>? checklist,
     List<int>? reminderMinutes,
     this.estimatedDuration = '',
     this.completedAt,
@@ -73,7 +103,7 @@ class Task {
     String? notes,
     String? repeatRule,
     String? color,
-    List<String>? checklist,
+    List<ChecklistItemData>? checklist,
     List<int>? reminderMinutes,
     String? estimatedDuration,
     Object? completedAt = _clear,
@@ -125,7 +155,8 @@ class Task {
       'notes': notes,
       'repeatRule': repeatRule,
       'color': color,
-      'checklist': jsonEncode(checklist),
+      'checklist':
+          jsonEncode(checklist.map((item) => item.toMap()).toList()),
       'reminderMinutes': jsonEncode(reminderMinutes),
       'estimatedDuration': estimatedDuration,
       'completedAt': completedAt?.millisecondsSinceEpoch,
@@ -136,13 +167,28 @@ class Task {
 
   factory Task.fromMap(Map<String, dynamic> map) {
     dynamic checklistValue = map['checklist'];
-    List<String> parsedChecklist = [];
+    List<ChecklistItemData> parsedChecklist = [];
     if (checklistValue is String && checklistValue.isNotEmpty) {
-      parsedChecklist = (jsonDecode(checklistValue) as List)
-          .map((e) => e.toString())
-          .toList();
+      try {
+        final decoded = jsonDecode(checklistValue) as List;
+        for (final entry in decoded) {
+          if (entry is Map) {
+            parsedChecklist.add(ChecklistItemData.fromMap(
+                Map<String, dynamic>.from(entry)));
+          } else if (entry is String && entry.isNotEmpty) {
+            parsedChecklist.add(ChecklistItemData.fromString(entry));
+          }
+        }
+      } catch (_) {}
     } else if (checklistValue is List) {
-      parsedChecklist = checklistValue.map((e) => e.toString()).toList();
+      for (final entry in checklistValue) {
+        if (entry is Map) {
+          parsedChecklist.add(
+              ChecklistItemData.fromMap(Map<String, dynamic>.from(entry)));
+        } else if (entry is String && entry.isNotEmpty) {
+          parsedChecklist.add(ChecklistItemData.fromString(entry));
+        }
+      }
     }
 
     dynamic reminderValue = map['reminderMinutes'];
@@ -200,6 +246,10 @@ class Task {
       return DateTime.fromMillisecondsSinceEpoch(value);
     }
     if (value is String) {
+      final millis = int.tryParse(value);
+      if (millis != null) {
+        return DateTime.fromMillisecondsSinceEpoch(millis);
+      }
       return DateTime.tryParse(value) ?? (fallback ?? DateTime.now());
     }
     return fallback ?? DateTime.now();
@@ -217,9 +267,20 @@ class Task {
       case 'weekly':
         nextDate = dueDate.add(const Duration(days: 7));
       case 'monthly':
-        nextDate = DateTime(dueDate.year, dueDate.month + 1, dueDate.day);
+        var year = dueDate.year;
+        var month = dueDate.month + 1;
+        if (month > 12) {
+          month = 1;
+          year++;
+        }
+        final lastDay = DateTime(year, month + 1, 0).day;
+        nextDate =
+            DateTime(year, month, dueDate.day.clamp(1, lastDay));
       case 'yearly':
-        nextDate = DateTime(dueDate.year + 1, dueDate.month, dueDate.day);
+        final year = dueDate.year + 1;
+        final lastDay = DateTime(year, dueDate.month + 1, 0).day;
+        nextDate = DateTime(
+            year, dueDate.month, dueDate.day.clamp(1, lastDay));
       default:
         nextDate = dueDate.add(const Duration(days: 1));
     }
@@ -229,6 +290,28 @@ class Task {
       isCompleted: false,
       completedAt: null,
       updatedAt: DateTime.now(),
+    );
+  }
+
+  Task regenerate() {
+    final next = nextOccurrence();
+    final delta = next.dueDate.difference(dueDate);
+
+    return Task(
+      id: null,
+      title: title,
+      description: description,
+      category: category,
+      priority: priority,
+      dueDate: next.dueDate,
+      startTime: startTime?.add(delta),
+      endTime: endTime?.add(delta),
+      notes: notes,
+      repeatRule: repeatRule,
+      color: color,
+      checklist: List<ChecklistItemData>.from(checklist),
+      reminderMinutes: List<int>.from(reminderMinutes),
+      estimatedDuration: estimatedDuration,
     );
   }
 

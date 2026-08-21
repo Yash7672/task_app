@@ -9,7 +9,10 @@ void main() {
       category: 'College',
       priority: 'High',
       dueDate: DateTime(2026, 7, 25, 20, 0),
-      checklist: const ['Read notes', 'Solve questions'],
+      checklist: const [
+        ChecklistItemData(text: 'Read notes'),
+        ChecklistItemData(text: 'Solve questions'),
+      ],
       isFavorite: true,
       isPinned: true,
       reminderMinutes: [10, 30],
@@ -19,10 +22,26 @@ void main() {
     final restored = Task.fromMap(map);
 
     expect(restored.title, 'Study for exam');
-    expect(restored.checklist, ['Read notes', 'Solve questions']);
+    expect(restored.checklist.map((c) => c.text).toList(),
+        ['Read notes', 'Solve questions']);
     expect(restored.isFavorite, isTrue);
     expect(restored.isPinned, isTrue);
     expect(restored.reminderMinutes, [10, 30]);
+  });
+
+  test('legacy plain-string checklists still parse with done=false', () {
+    final task = Task(
+      title: 'Legacy',
+      category: 'Personal',
+      dueDate: DateTime(2026, 7, 25),
+    );
+    final map = task.toMap();
+    map['checklist'] = '["Read notes","Solve questions"]';
+
+    final restored = Task.fromMap(map);
+    expect(restored.checklist.length, 2);
+    expect(restored.checklist.first.text, 'Read notes');
+    expect(restored.checklist.first.done, isFalse);
   });
 
   test('recurring tasks advance to the next occurrence', () {

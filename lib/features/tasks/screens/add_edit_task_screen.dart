@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/notification_helper.dart';
 import '../../../models/task_model.dart';
+import '../../../providers/database_provider.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../providers/task_provider.dart';
 
@@ -29,20 +30,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   DateTime? _startTime;
   DateTime? _endTime;
   List<int> _selectedReminders = [];
-  List<String> _checklist = [];
-
-  final List<String> _categories = [
-    'Personal',
-    'College',
-    'Study',
-    'Gym',
-    'Shopping',
-    'Work',
-    'Health',
-    'Finance',
-    'Family',
-    'Travel'
-  ];
+  List<ChecklistItemData> _checklist = [];
 
   final List<String> _priorities = [
     'Critical',
@@ -80,7 +68,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       _startTime = widget.taskToEdit!.startTime;
       _endTime = widget.taskToEdit!.endTime;
       _selectedReminders = List<int>.from(widget.taskToEdit!.reminderMinutes);
-      _checklist = List<String>.from(widget.taskToEdit!.checklist);
+      _checklist = List<ChecklistItemData>.from(widget.taskToEdit!.checklist);
     } else {
       _selectedReminders = List<int>.from(
           ref.read(settingsPreferencesProvider).reminderMinutes);
@@ -121,6 +109,9 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       setState(() {
         if (isStart) {
           _startTime = dateTime;
+          if (_endTime != null && _endTime!.isBefore(dateTime)) {
+            _endTime = dateTime.add(const Duration(hours: 1));
+          }
         } else {
           _endTime = dateTime;
         }
@@ -132,14 +123,99 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     final item = _checklistController.text.trim();
     if (item.isEmpty) return;
     setState(() {
-      _checklist.add(item);
+      _checklist.add(ChecklistItemData(text: item));
       _checklistController.clear();
     });
+  }
+
+  Future<List<Task>> _findConflicts() async {
+    if (_startTime == null || _endTime == null) return [];
+    return ref.read(databaseProvider).getConflictingTasks(
+          start: _startTime!,
+          end: _endTime!,
+          excludeTaskId: widget.taskToEdit?.id,
+        );
+  }
+
+  Future<bool> _confirmConflict(List<Task> conflicts) async {
+    if (!mounted) return false;
+    final theme = Theme.of(context);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Schedule conflict'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This task overlaps with ${conflicts.length} timed task${conflicts.length > 1 ? 's' : ''}:',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            ...conflicts.take(3).map((task) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.schedule, size: 16, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${task.title} (${_timeRange(task)})',
+                          style: theme.textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Change Time'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Keep Anyway'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  String _timeRange(Task task) {
+    if (task.startTime == null || task.endTime == null) return '';
+    String fmt(DateTime d) =>
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    return '${fmt(task.startTime!)}–${fmt(task.endTime!)}';
   }
 
   Future<void> _saveTask() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
+    }
+
+    if (_startTime != null &&
+        _endTime != null &&
+        _endTime!.isBefore(_startTime!)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('End time must be after the start time.')));
+      return;
+    }
+
+    final conflicts = await _findConflicts();
+    if (conflicts.isNotEmpty) {
+      final proceed = await _confirmConflict(conflicts);
+      if (!proceed) return;
     }
 
     final hasReminders = _selectedReminders.isNotEmpty &&
@@ -192,6 +268,17 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final categoriesState = ref.watch(categoriesProvider);
+    final categoryNames = categoriesState.maybeWhen(
+      data: (categories) =>
+          categories.map((c) => c.name).toList(),
+      orElse: () => <String>[],
+    );
+    final effectiveCategory =
+        categoryNames.contains(_selectedCategory) || _selectedCategory.isEmpty
+            ? _selectedCategory
+            : null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.taskToEdit == null ? 'Add Task' : 'Edit Task'),
@@ -227,10 +314,10 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: _selectedCategory,
+                      initialValue: effectiveCategory,
                       decoration: const InputDecoration(
                           labelText: 'Category', border: OutlineInputBorder()),
-                      items: _categories
+                      items: categoryNames
                           .map(
                               (c) => DropdownMenuItem(value: c, child: Text(c)))
                           .toList(),
@@ -341,6 +428,9 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                     labelText: 'Notes', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
+              Text('Checklist',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -349,6 +439,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                       decoration: const InputDecoration(
                           labelText: 'Checklist Item',
                           border: OutlineInputBorder()),
+                      onSubmitted: (_) => _addChecklistItem(),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -358,16 +449,33 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
               ),
               const SizedBox(height: 8),
               if (_checklist.isNotEmpty)
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _checklist
-                      .map((item) => Chip(
-                            label: Text(item),
-                            onDeleted: () =>
-                                setState(() => _checklist.remove(item)),
-                          ))
-                      .toList(),
+                Column(
+                  children: [
+                    for (var i = 0; i < _checklist.length; i++)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: _checklist[i].done,
+                        title: Text(
+                          _checklist[i].text,
+                          style: TextStyle(
+                            decoration: _checklist[i].done
+                                ? TextDecoration.lineThrough
+                                : null,
+                            color: _checklist[i].done ? Colors.grey : null,
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setState(() =>
+                              _checklist[i] = _checklist[i].copyWith(done: val ?? false));
+                        },
+                        secondary: IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () =>
+                              setState(() => _checklist.removeAt(i)),
+                        ),
+                      ),
+                  ],
                 ),
               const SizedBox(height: 20),
               ElevatedButton(

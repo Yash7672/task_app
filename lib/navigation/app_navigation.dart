@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../features/calendar/screens/calendar_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
-import '../features/settings/screens/settings_screen.dart';
-import '../features/stats/screens/stats_screen.dart';
+import '../features/more/screens/more_screen.dart';
 import '../features/streaks/screens/streaks_screen.dart';
 import '../features/tasks/screens/task_list_screen.dart';
 
@@ -17,11 +16,10 @@ class _AppNavigationState extends State<AppNavigation> {
   int _currentIndex = 0;
   final List<Widget> _pages = const [
     DashboardScreen(),
-    CalendarScreen(),
     TaskListScreen(),
+    CalendarScreen(),
     StreaksScreen(),
-    StatsScreen(),
-    SettingsScreen(),
+    MoreScreen(),
   ];
 
   @override
@@ -36,14 +34,25 @@ class _AppNavigationState extends State<AppNavigation> {
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.dashboard), label: 'Dashboard'),
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard),
+              label: 'Home'),
           NavigationDestination(
-              icon: Icon(Icons.calendar_month), label: 'Calendar'),
-          NavigationDestination(icon: Icon(Icons.list_alt), label: 'Tasks'),
+              icon: Icon(Icons.list_alt_outlined),
+              selectedIcon: Icon(Icons.list_alt),
+              label: 'Tasks'),
           NavigationDestination(
-              icon: Icon(Icons.local_fire_department), label: 'Streaks'),
-          NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Stats'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
+              icon: Icon(Icons.calendar_month_outlined),
+              selectedIcon: Icon(Icons.calendar_month),
+              label: 'Calendar'),
+          NavigationDestination(
+              icon: Icon(Icons.local_fire_department_outlined),
+              selectedIcon: Icon(Icons.local_fire_department),
+              label: 'Habits'),
+          NavigationDestination(
+              icon: Icon(Icons.apps_outlined),
+              selectedIcon: Icon(Icons.apps),
+              label: 'More'),
         ],
       ),
     );

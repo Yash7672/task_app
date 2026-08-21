@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import '../models/birthday_model.dart';
 import '../models/category_model.dart';
+import '../models/checklist_model.dart';
+import '../models/focus_session_model.dart';
 import '../models/habit_model.dart';
 import '../models/task_model.dart';
 
@@ -11,10 +14,20 @@ class DatabaseHelper {
   static Database? _database;
   static String? _cachedDbPath;
 
+  static const int schemaVersion = 5;
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('taskflow.db');
     return _database!;
+  }
+
+  Future<String> get databasePath async {
+    if (_cachedDbPath == null) {
+      final dbPath = await getDatabasesPath();
+      _cachedDbPath = p.join(dbPath, 'taskflow.db');
+    }
+    return _cachedDbPath!;
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -25,7 +38,7 @@ class DatabaseHelper {
 
     return openDatabase(
       _cachedDbPath!,
-      version: 4,
+      version: schemaVersion,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -87,6 +100,9 @@ class DatabaseHelper {
       }
       await _createIndexes(db);
     }
+    if (oldVersion < 5) {
+      await _createV5Tables(db);
+    }
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -95,10 +111,59 @@ class DatabaseHelper {
       'CREATE INDEX IF NOT EXISTS idx_tasks_dueDate ON tasks(dueDate)',
       'CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)',
       'CREATE INDEX IF NOT EXISTS idx_habit_logs_habitId ON habit_logs(habitId)',
+      'CREATE INDEX IF NOT EXISTS idx_checklist_items_checklistId ON checklist_items(checklistId)',
+      'CREATE INDEX IF NOT EXISTS idx_focus_sessions_start ON focus_sessions(startTime)',
     ];
     for (final sql in indexes) {
       await db.execute(sql);
     }
+  }
+
+  Future<void> _createV5Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS checklists (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        createdAt INTEGER,
+        updatedAt INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS checklist_items (
+        id TEXT PRIMARY KEY,
+        checklistId TEXT NOT NULL,
+        text TEXT NOT NULL,
+        completed INTEGER DEFAULT 0,
+        position INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS birthdays (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        birthDate INTEGER NOT NULL,
+        phone TEXT,
+        notes TEXT,
+        reminderDaysBefore TEXT DEFAULT '0',
+        createdAt INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS focus_sessions (
+        id TEXT PRIMARY KEY,
+        taskId TEXT,
+        label TEXT,
+        startTime INTEGER,
+        endTime INTEGER,
+        plannedMinutes INTEGER,
+        completed INTEGER DEFAULT 0
+      )
+    ''');
+
+    await _createIndexes(db);
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -160,6 +225,8 @@ class DatabaseHelper {
       )
     ''');
 
+    await _createV5Tables(db);
+
     final defaultCategories = [
       {'id': '1', 'name': 'Personal', 'colorHex': '#4CAF50', 'icon': '🧘'},
       {'id': '2', 'name': 'College', 'colorHex': '#2196F3', 'icon': '🎓'},
@@ -183,12 +250,7 @@ class DatabaseHelper {
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
-    await db.execute(
-        'CREATE INDEX idx_tasks_isDeleted_isArchived ON tasks(isDeleted, isArchived)');
-    await db.execute('CREATE INDEX idx_tasks_dueDate ON tasks(dueDate)');
-    await db.execute('CREATE INDEX idx_tasks_category ON tasks(category)');
-    await db.execute(
-        'CREATE INDEX idx_habit_logs_habitId ON habit_logs(habitId)');
+    await _createIndexes(db);
   }
 
   Future<Task> createTask(Task task) async {
@@ -256,6 +318,29 @@ class DatabaseHelper {
           '(title LIKE ? OR description LIKE ? OR notes LIKE ? OR category LIKE ?) AND isDeleted = 0 AND isArchived = 0',
       whereArgs: [value, value, value, value],
       orderBy: 'dueDate ASC',
+    );
+    return result.map((json) => Task.fromMap(json)).toList();
+  }
+
+  Future<List<Task>> getConflictingTasks({
+    required DateTime start,
+    required DateTime end,
+    String? excludeTaskId,
+  }) async {
+    final db = await database;
+    final startMs = start.millisecondsSinceEpoch;
+    final endMs = end.millisecondsSinceEpoch;
+
+    final result = await db.query(
+      'tasks',
+      where:
+          'isDeleted = 0 AND isArchived = 0 AND startTime IS NOT NULL AND endTime IS NOT NULL '
+          'AND startTime < ? AND endTime > ?'
+          '${excludeTaskId != null ? ' AND id != ?' : ''}',
+      whereArgs: excludeTaskId != null
+          ? [endMs, startMs, excludeTaskId]
+          : [endMs, startMs],
+      orderBy: 'startTime ASC',
     );
     return result.map((json) => Task.fromMap(json)).toList();
   }
@@ -331,6 +416,31 @@ class DatabaseHelper {
     return result.map((json) => TaskCategory.fromMap(json)).toList();
   }
 
+  Future<int> updateCategory(TaskCategory category) async {
+    final db = await database;
+    return db.update(
+      'categories',
+      category.toMap(),
+      where: 'id = ?',
+      whereArgs: [category.id],
+    );
+  }
+
+  Future<int> deleteCategory(String id) async {
+    final db = await database;
+    return db.delete('categories', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> reassignTasksCategory(String fromName, String toName) async {
+    final db = await database;
+    return db.update(
+      'tasks',
+      {'category': toName},
+      where: 'category = ?',
+      whereArgs: [fromName],
+    );
+  }
+
   Future<Habit> createHabit(Habit habit) async {
     final db = await database;
     await db.insert('habits', habit.toMap(),
@@ -389,6 +499,156 @@ class DatabaseHelper {
         where: 'habitId = ?', whereArgs: [habitId], orderBy: 'date DESC');
   }
 
+  Future<Checklist> createChecklist(Checklist checklist) async {
+    final db = await database;
+    await db.insert('checklists', checklist.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    return checklist;
+  }
+
+  Future<List<Checklist>> getAllChecklists() async {
+    final db = await database;
+    final result = await db.query('checklists', orderBy: 'updatedAt DESC');
+    return result.map((json) => Checklist.fromMap(json)).toList();
+  }
+
+  Future<int> updateChecklist(Checklist checklist) async {
+    final db = await database;
+    return db.update(
+      'checklists',
+      checklist.toMap(),
+      where: 'id = ?',
+      whereArgs: [checklist.id],
+    );
+  }
+
+  Future<int> deleteChecklist(String id) async {
+    final db = await database;
+    await db.delete('checklist_items',
+        where: 'checklistId = ?', whereArgs: [id]);
+    return db.delete('checklists', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<ChecklistItem> createChecklistItem(ChecklistItem item) async {
+    final db = await database;
+    await db.insert('checklist_items', item.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    await _touchChecklist(item.checklistId);
+    return item;
+  }
+
+  Future<List<ChecklistItem>> getChecklistItems(String checklistId) async {
+    final db = await database;
+    final result = await db.query(
+      'checklist_items',
+      where: 'checklistId = ?',
+      whereArgs: [checklistId],
+      orderBy: 'position ASC',
+    );
+    return result.map((json) => ChecklistItem.fromMap(json)).toList();
+  }
+
+  Future<Map<String, List<ChecklistItem>>> getAllChecklistItems() async {
+    final db = await database;
+    final result =
+        await db.query('checklist_items', orderBy: 'position ASC');
+    final map = <String, List<ChecklistItem>>{};
+    for (final row in result) {
+      final item = ChecklistItem.fromMap(row);
+      map.putIfAbsent(item.checklistId, () => []).add(item);
+    }
+    return map;
+  }
+
+  Future<int> updateChecklistItem(ChecklistItem item) async {
+    final db = await database;
+    await _touchChecklist(item.checklistId);
+    return db.update(
+      'checklist_items',
+      item.toMap(),
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
+  }
+
+  Future<int> deleteChecklistItem(String id, String checklistId) async {
+    final db = await database;
+    await _touchChecklist(checklistId);
+    return db.delete('checklist_items', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> _touchChecklist(String checklistId) async {
+    final db = await database;
+    await db.update(
+      'checklists',
+      {'updatedAt': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [checklistId],
+    );
+  }
+
+  Future<Birthday> createBirthday(Birthday birthday) async {
+    final db = await database;
+    await db.insert('birthdays', birthday.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    return birthday;
+  }
+
+  Future<List<Birthday>> getAllBirthdays() async {
+    final db = await database;
+    final result = await db.query('birthdays', orderBy: 'name ASC');
+    return result.map((json) => Birthday.fromMap(json)).toList();
+  }
+
+  Future<int> updateBirthday(Birthday birthday) async {
+    final db = await database;
+    return db.update(
+      'birthdays',
+      birthday.toMap(),
+      where: 'id = ?',
+      whereArgs: [birthday.id],
+    );
+  }
+
+  Future<int> deleteBirthday(String id) async {
+    final db = await database;
+    return db.delete('birthdays', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<FocusSession> createFocusSession(FocusSession session) async {
+    final db = await database;
+    await db.insert('focus_sessions', session.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    return session;
+  }
+
+  Future<List<FocusSession>> getFocusSessions({int limit = 100}) async {
+    final db = await database;
+    final result = await db.query(
+      'focus_sessions',
+      orderBy: 'startTime DESC',
+      limit: limit,
+    );
+    return result.map((json) => FocusSession.fromMap(json)).toList();
+  }
+
+  Future<int> getTotalFocusMinutes({
+    required DateTime rangeStart,
+    DateTime? rangeEnd,
+  }) async {
+    final db = await database;
+    final endMs =
+        (rangeEnd ?? DateTime.now()).millisecondsSinceEpoch;
+    final result = await db.rawQuery(
+      'SELECT SUM(endTime - startTime) as total FROM focus_sessions '
+      'WHERE startTime >= ? AND endTime <= ? AND completed = 1',
+      [rangeStart.millisecondsSinceEpoch, endMs],
+    );
+    final total = result.first['total'];
+    if (total is int) return total ~/ 60000;
+    return 0;
+  }
+
   Future<void> initDatabase() async {
     await database;
   }
@@ -397,5 +657,48 @@ class DatabaseHelper {
     final db = await database;
     await db.close();
     _database = null;
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
+    final db = await database;
+    final tables = <String, List<Map<String, dynamic>>>{};
+    for (final table in [
+      'tasks',
+      'categories',
+      'habits',
+      'habit_logs',
+      'checklists',
+      'checklist_items',
+      'birthdays',
+      'focus_sessions'
+    ]) {
+      tables[table] = await db.query(table);
+    }
+    return tables;
+  }
+
+  Future<void> importAllTables(
+      Map<String, List<Map<String, dynamic>>> data) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final table in data.keys) {
+        await txn.delete(table);
+        final rows = data[table] ?? const [];
+        for (final row in rows) {
+          await txn.insert(table, row,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+    });
+  }
+
+  Future<Map<String, int>> getDataCounts() async {
+    final db = await database;
+    final counts = <String, int>{};
+    for (final table in ['tasks', 'habits', 'birthdays']) {
+      final result = await db.rawQuery('SELECT COUNT(*) as c FROM $table');
+      counts[table] = result.first['c'] as int? ?? 0;
+    }
+    return counts;
   }
 }
