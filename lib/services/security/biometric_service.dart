@@ -28,6 +28,19 @@ class BiometricService {
     }
   }
 
+  /// True when a face-recognition biometric (e.g. Face ID) is enrolled on
+  /// this device, regardless of what else is enrolled.
+  static Future<bool> hasFace() async {
+    if (kIsWeb) return false;
+    try {
+      final list = await _auth.getAvailableBiometrics();
+      return list.contains(BiometricType.face);
+    } catch (e) {
+      debugPrint('Face biometric check failed: $e');
+      return false;
+    }
+  }
+
   /// True when face recognition is the enrolled biometric (e.g. Face ID),
   /// used to pick the right icon on the lock screen.
   static Future<bool> prefersFace() async {

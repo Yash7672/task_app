@@ -13,6 +13,7 @@ import '../../../services/backup/backup_service.dart';
 import '../../../services/backup/restore_service.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/home_widget_service.dart';
+import '../../../services/security/biometric_service.dart';
 import '../../categories/screens/manage_categories_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 
@@ -69,6 +70,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 if (security.appLockEnabled) ...[
                   const _BiometricTile(),
+                  const _FaceIdTile(),
                   ListTile(
                     title: const Text('Change PIN'),
                     subtitle: const Text('Update your app lock PIN'),
@@ -646,16 +648,83 @@ class _BiometricTileState extends ConsumerState<_BiometricTile> {
     return SwitchListTile.adaptive(
       title: const Text('Biometric Unlock'),
       subtitle: Text(security.biometricAvailable
-          ? (_prefersFace
+          ? (_prefersFace && !security.faceIdEnabled
               ? 'Use face recognition to unlock'
               : 'Use fingerprint or face to unlock')
           : 'No biometrics enrolled on this device'),
       value: security.biometricEnabled && security.biometricAvailable,
       onChanged: security.biometricAvailable
-          ? (value) => ref
-              .read(securityProvider.notifier)
-              .setBiometricEnabled(value)
+          ? (value) async {
+              await ref
+                  .read(securityProvider.notifier)
+                  .setBiometricEnabled(value);
+            }
           : null,
+    );
+  }
+}
+
+/// Face ID unlock toggle shown below Biometric Unlock. Only interactive
+/// when a face biometric is enrolled on the device; enabling runs one
+/// verification scan so Face ID can't be turned on without proving it's
+/// really you.
+class _FaceIdTile extends ConsumerStatefulWidget {
+  const _FaceIdTile();
+
+  @override
+  ConsumerState<_FaceIdTile> createState() => _FaceIdTileState();
+}
+
+class _FaceIdTileState extends ConsumerState<_FaceIdTile> {
+  bool _verifying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(securityProvider.notifier).refreshBiometrics();
+    });
+  }
+
+  Future<void> _onToggle(bool enable) async {
+    final notifier = ref.read(securityProvider.notifier);
+    if (!enable) {
+      await notifier.setFaceIdEnabled(false);
+      return;
+    }
+    // Prove identity once before trusting Face ID for future unlocks.
+    setState(() => _verifying = true);
+    final ok = await BiometricService.authenticate(
+      reason: 'Confirm your face to enable Face ID unlock',
+    );
+    if (!mounted) return;
+    setState(() => _verifying = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Face not verified — Face ID stayed off'),
+          backgroundColor: Colors.orange));
+      return;
+    }
+    await notifier.setFaceIdEnabled(true);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Face ID enabled')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final security = ref.watch(securityProvider);
+    return SwitchListTile.adaptive(
+      title: const Text('Face ID'),
+      subtitle: Text(_verifying
+          ? 'Verifying your face…'
+          : security.faceIdAvailable
+              ? 'Use face recognition to unlock PYLO'
+              : 'No face recognition enrolled on this device'),
+      value: security.faceIdEnabled && security.faceIdAvailable,
+      onChanged: (!_verifying && security.faceIdAvailable) ? _onToggle : null,
     );
   }
 }

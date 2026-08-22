@@ -31,6 +31,8 @@ class SecurityState {
   final bool appLockEnabled;
   final bool biometricEnabled;
   final bool biometricAvailable;
+  final bool faceIdEnabled;
+  final bool faceIdAvailable;
   final bool hasPin;
   final LockTimeout lockTimeout;
   final bool isLocked;
@@ -40,6 +42,8 @@ class SecurityState {
     this.appLockEnabled = false,
     this.biometricEnabled = false,
     this.biometricAvailable = false,
+    this.faceIdEnabled = false,
+    this.faceIdAvailable = false,
     this.hasPin = false,
     this.lockTimeout = LockTimeout.immediately,
     this.isLocked = true,
@@ -51,11 +55,18 @@ class SecurityState {
   bool get shouldOfferBiometric =>
       requiresAuth && biometricEnabled && biometricAvailable;
 
+  bool get shouldOfferFaceId => requiresAuth && faceIdEnabled && faceIdAvailable;
+
+  bool get shouldOfferAnyBiometric =>
+      shouldOfferBiometric || shouldOfferFaceId;
+
   SecurityState copyWith({
     bool? isLoading,
     bool? appLockEnabled,
     bool? biometricEnabled,
     bool? biometricAvailable,
+    bool? faceIdEnabled,
+    bool? faceIdAvailable,
     bool? hasPin,
     LockTimeout? lockTimeout,
     bool? isLocked,
@@ -65,6 +76,8 @@ class SecurityState {
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
       biometricAvailable: biometricAvailable ?? this.biometricAvailable,
+      faceIdEnabled: faceIdEnabled ?? this.faceIdEnabled,
+      faceIdAvailable: faceIdAvailable ?? this.faceIdAvailable,
       hasPin: hasPin ?? this.hasPin,
       lockTimeout: lockTimeout ?? this.lockTimeout,
       isLocked: isLocked ?? this.isLocked,
@@ -91,16 +104,20 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
       if (appLockEnabled && !hasPin) {
         await prefs.setBool('app_lock_enabled', false);
         await prefs.setBool('biometric_enabled', false);
+        await prefs.setBool('face_id_enabled', false);
         debugPrint('App Lock self-healed: stored PIN missing');
       }
 
       final biometricAvailable = await BiometricService.isAvailable();
+      final faceIdAvailable = await BiometricService.hasFace();
 
       state = state.copyWith(
         isLoading: false,
         appLockEnabled: appLockEnabled && hasPin,
         biometricEnabled: prefs.getBool('biometric_enabled') ?? false,
         biometricAvailable: biometricAvailable,
+        faceIdEnabled: prefs.getBool('face_id_enabled') ?? false,
+        faceIdAvailable: faceIdAvailable,
         hasPin: hasPin,
         lockTimeout:
             LockTimeoutX.fromName(prefs.getString('lock_timeout')),
@@ -128,10 +145,12 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('app_lock_enabled', false);
     await prefs.setBool('biometric_enabled', false);
+    await prefs.setBool('face_id_enabled', false);
     await PinService.clearPin();
     state = state.copyWith(
       appLockEnabled: false,
       biometricEnabled: false,
+      faceIdEnabled: false,
       hasPin: false,
       isLocked: false,
     );
@@ -141,6 +160,12 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('biometric_enabled', enabled);
     state = state.copyWith(biometricEnabled: enabled);
+  }
+
+  Future<void> setFaceIdEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('face_id_enabled', enabled);
+    state = state.copyWith(faceIdEnabled: enabled);
   }
 
   /// Returns 'ok', 'wrong_pin' or 'error'.
@@ -174,8 +199,13 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   Future<void> refreshBiometrics() async {
     try {
       final available = await BiometricService.isAvailable();
-      if (state.biometricAvailable != available) {
-        state = state.copyWith(biometricAvailable: available);
+      final faceAvailable = await BiometricService.hasFace();
+      if (state.biometricAvailable != available ||
+          state.faceIdAvailable != faceAvailable) {
+        state = state.copyWith(
+          biometricAvailable: available,
+          faceIdAvailable: faceAvailable,
+        );
       }
     } catch (e) {
       debugPrint('Biometric refresh failed: $e');

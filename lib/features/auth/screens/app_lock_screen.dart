@@ -30,9 +30,12 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   }
 
   Future<void> _loadBiometricIcon() async {
-    final face = await BiometricService.prefersFace();
+    final security = ref.read(securityProvider);
+    final useFace =
+        (security.faceIdEnabled && security.faceIdAvailable) ||
+            await BiometricService.prefersFace();
     if (!mounted) return;
-    setState(() => _biometricIcon = face ? Icons.face : Icons.fingerprint);
+    setState(() => _biometricIcon = useFace ? Icons.face : Icons.fingerprint);
   }
 
   @override
@@ -62,16 +65,18 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
 
   Future<void> _maybeAutoBiometric() async {
     final state = ref.read(securityProvider);
-    if (!state.shouldOfferBiometric || _authenticating) return;
+    if (!state.shouldOfferAnyBiometric || _authenticating) return;
     await _authenticateWithBiometric();
   }
 
   Future<void> _authenticateWithBiometric() async {
     if (_authenticating) return;
     _authenticating = true;
-    final success = await BiometricService.authenticate(
-      reason: 'Unlock PYLO to access your tasks',
-    );
+    final security = ref.read(securityProvider);
+    final reason = (security.faceIdEnabled && security.faceIdAvailable)
+        ? 'Scan your face to unlock PYLO'
+        : 'Unlock PYLO to access your tasks';
+    final success = await BiometricService.authenticate(reason: reason);
     _authenticating = false;
     if (!mounted) return;
     if (success) {
@@ -120,7 +125,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
         title: 'PYLO is locked',
         errorText: _errorText,
         onPinCompleted: _onPinEntered,
-        showBiometric: security.shouldOfferBiometric,
+        showBiometric: security.shouldOfferAnyBiometric,
         onBiometricRequested: _authenticateWithBiometric,
         biometricIcon: _biometricIcon,
       ),
