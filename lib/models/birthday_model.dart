@@ -38,11 +38,24 @@ class Birthday {
 
   DateTime nextOccurrence({DateTime? now}) {
     final today = _dateOnly(now ?? DateTime.now());
+<<<<<<< HEAD
     var next = _occurrenceIn(today.year);
     if (next.isBefore(today)) {
       next = _occurrenceIn(today.year + 1);
+=======
+    var next = _safeDate(today.year, birthDate.month, birthDate.day);
+    if (next.isBefore(today)) {
+      next = _safeDate(today.year + 1, birthDate.month, birthDate.day);
+>>>>>>> 23dcc03 (error in apploc , git streaks perfect)
     }
     return next;
+  }
+
+  /// Creates a DateTime, clamping the day to the last valid day of the month.
+  /// This handles Feb 29 birthdays on non-leap years (falls back to Feb 28).
+  static DateTime _safeDate(int year, int month, int day) {
+    final lastDay = DateTime(year, month + 1, 0).day;
+    return DateTime(year, month, day.clamp(1, lastDay));
   }
 
   int daysUntilNext({DateTime? now}) {

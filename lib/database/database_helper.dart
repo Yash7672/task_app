@@ -642,6 +642,27 @@ class DatabaseHelper {
     return result.map(HabitCompletionItem.fromMap).toList();
   }
 
+  Future<void> addCompletionItem(HabitCompletionItem item) async {
+    final db = await database;
+    await db.insert('habit_completion_items', item.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateCompletionItem(HabitCompletionItem item) async {
+    final db = await database;
+    await db.update(
+      'habit_completion_items',
+      item.toMap(),
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
+  }
+
+  Future<void> deleteCompletionItem(String id) async {
+    final db = await database;
+    await db.delete('habit_completion_items', where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<HabitLogItem> createHabitLogItem(HabitLogItem item) async {
     final db = await database;
     await db.insert('habit_log_items', item.toMap(),

@@ -13,6 +13,7 @@ import 'database/database_helper.dart';
 import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/settings_provider.dart';
 import 'services/home_widget_service.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -79,6 +80,13 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
       }
       StartupBenchmark
           .mark('notifications_initialized (${sw.elapsedMilliseconds}ms)');
+
+      sw.reset();
+      try {
+        await NotificationService.initialize();
+      } catch (e) {
+        debugPrint('NotificationService init failed: $e');
+      }
     }
 
     if (!kIsWeb) {
