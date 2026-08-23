@@ -115,8 +115,21 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
 
   Future<void> load() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final hasPin = await PinService.hasPin();
+      // Run SharedPreferences, PinService, and brute-force state in parallel.
+      // Biometric checks are slow platform calls — fire them in parallel too
+      // and update state when they complete.
+      final results = await Future.wait([
+        SharedPreferences.getInstance(),
+        PinService.hasPin(),
+        BiometricService.isAvailable(),
+        BiometricService.hasFace(),
+      ]);
+
+      final prefs = results[0] as SharedPreferences;
+      final hasPin = results[1] as bool;
+      final biometricAvailable = results[2] as bool;
+      final faceIdAvailable = results[3] as bool;
+
       var appLockEnabled = prefs.getBool('app_lock_enabled') ?? false;
 
       // Restore brute-force throttling state (survives restarts so killing
@@ -136,9 +149,6 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
         await prefs.setBool('face_id_enabled', false);
         debugPrint('App Lock self-healed: stored PIN missing');
       }
-
-      final biometricAvailable = await BiometricService.isAvailable();
-      final faceIdAvailable = await BiometricService.hasFace();
 
       state = state.copyWith(
         isLoading: false,

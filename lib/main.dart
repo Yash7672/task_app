@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
 
 import 'core/utils/notification_helper.dart';
 import 'core/utils/startup_benchmark.dart';
 import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/settings_provider.dart';
-import 'services/home_widget_service.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
@@ -19,10 +19,12 @@ Future<void> main() async {
   StartupBenchmark.reset();
   StartupBenchmark.mark('main_entered');
 
+  // Initialize timezones synchronously — cheap, needed by notifications later.
+  tz_data.initializeTimeZones();
+
   if (kIsWeb) {
     databaseFactory = databaseFactoryFfiWeb;
   } else if (Platform.isWindows || Platform.isLinux) {
-    // sqflite has no native Windows/Linux implementation; FFI provides one.
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
@@ -64,28 +66,15 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
 
     if (!kIsWeb) {
       sw.reset();
-      try {
-        await NotificationHelper.init();
-      } catch (e) {
-        debugPrint('Notification init failed: $e');
-      }
+      // Initialize both notification services in parallel — independent work.
+      await Future.wait([
+        NotificationHelper.init().catchError((e) =>
+            debugPrint('NotificationHelper init failed: $e')),
+        NotificationService.initialize().catchError((e) =>
+            debugPrint('NotificationService init failed: $e')),
+      ]);
       StartupBenchmark
           .mark('notifications_initialized (${sw.elapsedMilliseconds}ms)');
-
-      sw.reset();
-      try {
-        await NotificationService.initialize();
-      } catch (e) {
-        debugPrint('NotificationService init failed: $e');
-      }
-    }
-
-    if (!kIsWeb) {
-      try {
-        await HomeWidgetService.pushNow();
-      } catch (e) {
-        debugPrint('HomeWidget init failed: $e');
-      }
     }
 
     if (kDebugMode) {

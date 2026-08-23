@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz_data;
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -15,7 +14,6 @@ class NotificationService {
   /// habit reminder to actually fire.
   static Future<void> initialize() async {
     if (_initialized) return;
-    tz_data.initializeTimeZones();
     try {
       final timezoneInfo = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));

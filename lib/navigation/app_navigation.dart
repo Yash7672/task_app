@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../features/calendar/screens/calendar_screen.dart';
 import '../features/checklist/screens/checklist_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
@@ -6,30 +8,32 @@ import '../features/more/screens/more_screen.dart';
 import '../features/streaks/screens/streaks_screen.dart';
 import '../features/tasks/screens/task_list_screen.dart';
 
-class AppNavigation extends StatefulWidget {
+final _screenProviders = Provider<List<Widget>>((ref) => const [
+      DashboardScreen(),
+      TaskListScreen(),
+      CalendarScreen(),
+      StreaksScreen(),
+      ChecklistScreen(),
+      MoreScreen(),
+    ]);
+
+class AppNavigation extends ConsumerStatefulWidget {
   const AppNavigation({super.key});
 
   @override
-  State<AppNavigation> createState() => _AppNavigationState();
+  ConsumerState<AppNavigation> createState() => _AppNavigationState();
 }
 
-class _AppNavigationState extends State<AppNavigation> {
+class _AppNavigationState extends ConsumerState<AppNavigation> {
   int _currentIndex = 0;
-  final List<Widget> _pages = const [
-    DashboardScreen(),
-    TaskListScreen(),
-    CalendarScreen(),
-    StreaksScreen(),
-    ChecklistScreen(),
-    MoreScreen(),
-  ];
 
   @override
   Widget build(BuildContext context) {
+    final pages = ref.watch(_screenProviders);
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: pages,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

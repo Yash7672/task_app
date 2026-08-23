@@ -32,7 +32,6 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadBiometricIcon();
       _syncLockout();
-      _maybeAutoBiometric();
     });
   }
 
@@ -79,17 +78,10 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
         if (ref.read(securityProvider).requiresAuth) {
           setState(() => _errorText = null);
           _loadBiometricIcon();
-          _maybeAutoBiometric();
         }
       default:
         break;
     }
-  }
-
-  Future<void> _maybeAutoBiometric() async {
-    final state = ref.read(securityProvider);
-    if (!state.shouldOfferAnyBiometric || _authenticating) return;
-    await _authenticateWithBiometric();
   }
 
   Future<void> _authenticateWithBiometric() async {
@@ -140,12 +132,10 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   Widget build(BuildContext context) {
     final security = ref.watch(securityProvider);
 
-    // The first post-frame callback races the async security load (isLoading
-    // is still true then), so retry the auto-prompt once loading completes.
+    // When async security load completes, update the biometric icon.
     ref.listen<SecurityState>(securityProvider, (previous, next) {
       if ((previous?.isLoading ?? true) && !next.isLoading) {
         _loadBiometricIcon();
-        _maybeAutoBiometric();
       }
     });
 
