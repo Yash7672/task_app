@@ -9,7 +9,6 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'core/utils/notification_helper.dart';
 import 'core/utils/startup_benchmark.dart';
-import 'database/database_helper.dart';
 import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/settings_provider.dart';
 import 'services/home_widget_service.dart';
@@ -62,14 +61,6 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
       debugPrint('Settings load failed: $e');
     }
     StartupBenchmark.mark('preferences_loaded (${sw.elapsedMilliseconds}ms)');
-
-    sw.reset();
-    try {
-      await DatabaseHelper.instance.initDatabase();
-    } catch (e, stackTrace) {
-      debugPrint('Database init failed: $e\n$stackTrace');
-    }
-    StartupBenchmark.mark('database_initialized (${sw.elapsedMilliseconds}ms)');
 
     if (!kIsWeb) {
       sw.reset();

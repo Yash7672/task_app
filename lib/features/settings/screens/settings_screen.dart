@@ -5,16 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/backup_helper_native.dart'
     if (dart.library.js) '../../../core/utils/backup_helper_web.dart' as backup_helper;
-<<<<<<< HEAD
 import '../../../core/utils/notification_helper.dart';
 import '../../../core/widgets/dialog_disposer.dart';
 import '../../../models/birthday_model.dart';
 import '../../../providers/birthday_provider.dart';
 import '../../../providers/checklist_provider.dart';
 import '../../../providers/focus_provider.dart';
-=======
-import '../../../providers/birthday_provider.dart';
->>>>>>> 23dcc03 (error in apploc , git streaks perfect)
 import '../../../providers/preferences_provider.dart';
 import '../../../providers/profile_provider.dart';
 import '../../../providers/security_provider.dart';
@@ -645,7 +641,6 @@ class SettingsScreen extends ConsumerWidget {
       await ref.read(taskProvider.notifier).loadTasks();
       await ref.read(categoriesProvider.notifier).loadCategories();
       await ref.read(habitsProvider.notifier).loadHabits();
-<<<<<<< HEAD
       // Reload every other provider backed by the restored DB/prefs so the
       // whole UI reflects the import immediately (not just after restart).
       ref.invalidate(checklistProvider);
@@ -657,9 +652,6 @@ class SettingsScreen extends ConsumerWidget {
       // backed by prefs too; reload without re-locking an unlocked session.
       await ref.read(securityProvider.notifier).reloadAfterRestore();
       await ref.read(settingsProvider.notifier).ensureLoaded();
-=======
-      await ref.read(birthdayProvider.notifier).loadBirthdays();
->>>>>>> 23dcc03 (error in apploc , git streaks perfect)
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
