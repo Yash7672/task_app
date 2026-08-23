@@ -46,7 +46,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     'Monthly',
     'Yearly'
   ];
-  final List<int> _reminderOptions = [1, 5, 10, 15, 30, 60];
+  final List<int> _reminderOptions = [1, 5, 10, 15, 30, 60, 120, 180, 1440];
 
   @override
   void initState() {
@@ -314,52 +314,64 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: effectiveCategory,
+                    child: InputDecorator(
                       decoration: const InputDecoration(
                           labelText: 'Category', border: OutlineInputBorder()),
-                      items: categoryNames
-                          .map(
-                              (c) => DropdownMenuItem(value: c, child: Text(c)))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _selectedCategory = val);
-                        }
-                      },
+                      child: DropdownButton<String>(
+                        value: effectiveCategory,
+                        isExpanded: true,
+                        underline: const SizedBox.shrink(),
+                        items: categoryNames
+                            .map(
+                                (c) => DropdownMenuItem(value: c, child: Text(c)))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedCategory = val);
+                          }
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedPriority,
+                    child: InputDecorator(
                       decoration: const InputDecoration(
                           labelText: 'Priority', border: OutlineInputBorder()),
-                      items: _priorities
-                          .map(
-                              (p) => DropdownMenuItem(value: p, child: Text(p)))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _selectedPriority = val);
-                        }
-                      },
+                      child: DropdownButton<String>(
+                        value: _selectedPriority,
+                        isExpanded: true,
+                        underline: const SizedBox.shrink(),
+                        items: _priorities
+                            .map(
+                                (p) => DropdownMenuItem(value: p, child: Text(p)))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedPriority = val);
+                          }
+                        },
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _repeatRule,
+              InputDecorator(
                 decoration: const InputDecoration(
                     labelText: 'Repeat Rule', border: OutlineInputBorder()),
-                items: _repeatRules
-                    .map((rule) =>
-                        DropdownMenuItem(value: rule, child: Text(rule)))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _repeatRule = val);
-                },
+                child: DropdownButton<String>(
+                  value: _repeatRule,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  items: _repeatRules
+                      .map((rule) =>
+                          DropdownMenuItem(value: rule, child: Text(rule)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _repeatRule = val);
+                  },
+                ),
               ),
               const SizedBox(height: 12),
               ListTile(
@@ -397,7 +409,18 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                 runSpacing: 4,
                 children: _reminderOptions.map((minutes) {
                   final isSelected = _selectedReminders.contains(minutes);
-                  final label = minutes == 1 ? '1 min' : '$minutes min';
+                  final label = switch (minutes) {
+                    1 => '1 min',
+                    5 => '5 min',
+                    10 => '10 min',
+                    15 => '15 min',
+                    30 => '30 min',
+                    60 => '1 hr',
+                    120 => '2 hr',
+                    180 => '3 hr',
+                    1440 => '1 day',
+                    _ => '$minutes min',
+                  };
                   return FilterChip(
                     label: Text(label),
                     selected: isSelected,
@@ -413,6 +436,44 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                     },
                   );
                 }).toList(),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.access_time, size: 20),
+                title: const Text('Remind at a specific time',
+                    style: TextStyle(fontSize: 14)),
+                subtitle: const Text('Pick a clock time for the reminder',
+                    style: TextStyle(fontSize: 12)),
+                onTap: () async {
+                  final taskDateTime = _startTime ??
+                      DateTime(_dueDate.year, _dueDate.month, _dueDate.day, 9, 0);
+                   final picked = await showTimePicker(
+                     context: context,
+                     initialTime: TimeOfDay.fromDateTime(taskDateTime),
+                   );
+                   if (!mounted) return;
+                    if (picked != null) {
+                     final reminderTime = DateTime(
+                       _dueDate.year, _dueDate.month, _dueDate.day,
+                       picked.hour, picked.minute,
+                     );
+                     final diff = taskDateTime.difference(reminderTime).inMinutes;
+                     if (diff > 0 && !_selectedReminders.contains(diff)) {
+                       setState(() {
+                         _selectedReminders.add(diff);
+                         _selectedReminders.sort();
+                       });
+                       } else if (diff <= 0) {
+                         if (!mounted) return;
+                         // ignore: use_build_context_synchronously — guarded by mounted check above
+                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                         content: Text('Reminder time must be before the task start time'),
+                         backgroundColor: Colors.orange,
+                       ));
+                     }
+                   }
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(

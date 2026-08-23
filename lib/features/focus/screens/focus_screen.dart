@@ -132,20 +132,14 @@ class _SetupViewState extends ConsumerState<_SetupView> {
     final pendingTasks =
         todayTasks.where((t) => !t.isCompleted).toList();
 
-    // If the selected task disappeared (completed/archived elsewhere), clear
-    // the selection AND the prefilled label in a post-frame callback so the
-    // UI can never show a task that is about to be submitted as null.
-    final selectedStillExists =
-        pendingTasks.any((t) => t.id == _selectedTaskId);
-    if (!selectedStillExists && _selectedTaskId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() {
-          _selectedTaskId = null;
-          _labelController.clear();
-        });
-      });
-    }
+    // Clear stale selection when the task disappears (completed/archived elsewhere)
+    ref.listen(todayTasksProvider, (prev, next) {
+      final pending = next.where((t) => !t.isCompleted).toList();
+      if (_selectedTaskId != null && !pending.any((t) => t.id == _selectedTaskId)) {
+        _selectedTaskId = null;
+        _labelController.clear();
+      }
+    });
     final selectedTask = pendingTasks
         .where((t) => t.id == _selectedTaskId)
         .firstOrNull;
@@ -214,29 +208,33 @@ class _SetupViewState extends ConsumerState<_SetupView> {
                       style: widget.theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey(_selectedTaskId),
-                    initialValue: _selectedTaskId,
+                  InputDecorator(
                     decoration: const InputDecoration(
                         labelText: 'Pick a task (optional)',
                         border: OutlineInputBorder()),
-                    items: pendingTasks
-                        .map((t) =>
-                            DropdownMenuItem(value: t.id, child: Text(t.title)))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedTaskId = value;
-                        if (value != null) {
-                          final task = pendingTasks
-                              .where((t) => t.id == value)
-                              .firstOrNull;
-                          if (task != null) {
-                            _labelController.text = task.title;
+                    child: DropdownButton<String>(
+                      key: ValueKey(_selectedTaskId),
+                      value: _selectedTaskId,
+                      isExpanded: true,
+                      underline: const SizedBox.shrink(),
+                      items: pendingTasks
+                          .map((t) =>
+                              DropdownMenuItem(value: t.id, child: Text(t.title)))
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedTaskId = value;
+                          if (value != null) {
+                            final task = pendingTasks
+                                .where((t) => t.id == value)
+                                .firstOrNull;
+                            if (task != null) {
+                              _labelController.text = task.title;
+                            }
                           }
-                        }
-                      });
-                    },
+                        });
+                      },
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(

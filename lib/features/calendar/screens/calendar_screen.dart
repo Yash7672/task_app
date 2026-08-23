@@ -20,6 +20,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   Widget build(BuildContext context) {
     final tasks = ref.watch(allTasksProvider);
 
+    // Pre-compute O(N) once instead of O(42*N) per eventLoader call
+    final tasksByDay = <DateTime, List<Task>>{};
+    for (final task in tasks) {
+      if (task.isDeleted || task.isArchived) continue;
+      final day = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      tasksByDay.putIfAbsent(day, () => []).add(task);
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Calendar')),
       body: ListView(
@@ -40,12 +48,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 _focusedDay = focusedDay;
               });
             },
-            eventLoader: (day) => tasks
-                .where((task) =>
-                    !task.isDeleted &&
-                    !task.isArchived &&
-                    isSameDay(task.dueDate, day))
-                .toList(),
+            eventLoader: (day) => tasksByDay[DateTime(day.year, day.month, day.day)] ?? const [],
           ),
           const SizedBox(height: 8),
           Padding(
@@ -54,16 +57,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 'Tasks for ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
                 style: Theme.of(context).textTheme.titleMedium),
           ),
-          ..._selectedTasksFor(tasks, _selectedDate),
+          ..._buildSelectedTasks(tasksByDay, _selectedDate),
         ],
       ),
     );
   }
 
-  List<Widget> _selectedTasksFor(List<Task> tasks, DateTime date) {
-    final selectedTasks = tasks.where((task) {
-      return !task.isDeleted && !task.isArchived && isSameDay(task.dueDate, date);
-    }).toList();
+  List<Widget> _buildSelectedTasks(Map<DateTime, List<Task>> tasksByDay, DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    final selectedTasks = tasksByDay[day] ?? [];
 
     if (selectedTasks.isEmpty) {
       return const [

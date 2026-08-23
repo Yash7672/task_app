@@ -11,6 +11,8 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'core/utils/notification_helper.dart';
 import 'core/utils/startup_benchmark.dart';
 import 'features/auth/screens/app_lock_screen.dart';
+import 'providers/birthday_provider.dart';
+import 'providers/preferences_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
@@ -75,6 +77,17 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
       ]);
       StartupBenchmark
           .mark('notifications_initialized (${sw.elapsedMilliseconds}ms)');
+
+      // Reschedule birthday reminders for all existing birthdays so
+      // notifications survive app restarts and permission changes.
+      try {
+        final prefs = ref.read(settingsPreferencesProvider);
+        if (prefs.birthdayRemindersEnabled) {
+          await ref.read(birthdayProvider.notifier).rescheduleAllReminders();
+        }
+      } catch (e) {
+        debugPrint('Birthday reschedule failed: $e');
+      }
     }
 
     if (kDebugMode) {

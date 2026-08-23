@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/task_provider.dart';
@@ -11,18 +13,25 @@ class TaskListScreen extends ConsumerStatefulWidget {
 }
 
 class _TaskListScreenState extends ConsumerState<TaskListScreen> {
-  String _query = '';
+  String _queryLower = '';
   String _filter = 'All';
   bool _showArchived = false;
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final tasks = ref.watch(allTasksProvider);
     final filteredTasks = tasks.where((task) {
-      final matchesQuery = _query.isEmpty ||
-          task.title.toLowerCase().contains(_query.toLowerCase()) ||
-          task.category.toLowerCase().contains(_query.toLowerCase()) ||
-          task.notes.toLowerCase().contains(_query.toLowerCase());
+      final matchesQuery = _queryLower.isEmpty ||
+          task.title.toLowerCase().contains(_queryLower) ||
+          task.category.toLowerCase().contains(_queryLower) ||
+          task.notes.toLowerCase().contains(_queryLower);
 
       final matchesFilter = switch (_filter) {
         'Completed' => task.isCompleted,
@@ -50,24 +59,35 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
                 labelText: 'Search tasks',
                 border: OutlineInputBorder(),
               ),
-              onChanged: (value) => setState(() => _query = value),
+              onChanged: (value) {
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 300), () {
+                  setState(() {
+                    _queryLower = value.toLowerCase();
+                  });
+                });
+              },
             ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: DropdownButtonFormField<String>(
-              initialValue: _filter,
+            child: InputDecorator(
               decoration: const InputDecoration(
                   labelText: 'Filter', border: OutlineInputBorder()),
-              items: const [
-                DropdownMenuItem(value: 'All', child: Text('All')),
-                DropdownMenuItem(value: 'Completed', child: Text('Completed')),
-                DropdownMenuItem(value: 'Pending', child: Text('Pending')),
-                DropdownMenuItem(value: 'Favorites', child: Text('Favorites')),
-                DropdownMenuItem(value: 'Pinned', child: Text('Pinned')),
-                DropdownMenuItem(value: 'Archived', child: Text('Archived')),
-              ],
-              onChanged: (value) => setState(() => _filter = value ?? 'All'),
+              child: DropdownButton<String>(
+                value: _filter,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                items: const [
+                  DropdownMenuItem(value: 'All', child: Text('All')),
+                  DropdownMenuItem(value: 'Completed', child: Text('Completed')),
+                  DropdownMenuItem(value: 'Pending', child: Text('Pending')),
+                  DropdownMenuItem(value: 'Favorites', child: Text('Favorites')),
+                  DropdownMenuItem(value: 'Pinned', child: Text('Pinned')),
+                  DropdownMenuItem(value: 'Archived', child: Text('Archived')),
+                ],
+                onChanged: (value) => setState(() => _filter = value ?? 'All'),
+              ),
             ),
           ),
           const SizedBox(height: 8),
