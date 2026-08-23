@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/dialog_disposer.dart';
 import '../../../models/checklist_model.dart';
 import '../../../providers/checklist_provider.dart';
 
@@ -49,20 +50,23 @@ class ChecklistItemTile extends ConsumerWidget {
     final controller = TextEditingController(text: item.text);
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Item'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          onSubmitted: (value) => Navigator.pop(context, value),
+      builder: (context) => DisposeOnExit(
+        controllers: [controller],
+        child: AlertDialog(
+          title: const Text('Edit Item'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            onSubmitted: (value) => Navigator.pop(context, value),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, controller.text),
+                child: const Text('Save')),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Save')),
-        ],
       ),
     );
     if (result != null && result.trim().isNotEmpty) {

@@ -5,7 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/backup_helper_native.dart'
     if (dart.library.js) '../../../core/utils/backup_helper_web.dart' as backup_helper;
+import '../../../core/utils/notification_helper.dart';
+import '../../../core/widgets/dialog_disposer.dart';
+import '../../../models/birthday_model.dart';
+import '../../../providers/birthday_provider.dart';
+import '../../../providers/checklist_provider.dart';
+import '../../../providers/focus_provider.dart';
 import '../../../providers/preferences_provider.dart';
+import '../../../providers/profile_provider.dart';
 import '../../../providers/security_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/task_provider.dart';
@@ -116,10 +123,27 @@ class SettingsScreen extends ConsumerWidget {
                   title: const Text('Birthday reminders'),
                   subtitle: const Text('Yearly birthday notifications'),
                   value: prefs.birthdayRemindersEnabled,
-                  onChanged: (value) => ref
-                      .read(settingsPreferencesProvider.notifier)
-                      .setBirthdayRemindersEnabled(value),
+                  onChanged: (value) async {
+                    await ref
+                        .read(settingsPreferencesProvider.notifier)
+                        .setBirthdayRemindersEnabled(value);
+                    if (value) {
+                      // Birthdays added while reminders were off have no
+                      // scheduled notifications — schedule them all now.
+                      await ref
+                          .read(birthdayProvider.notifier)
+                          .rescheduleAllReminders();
+                    } else if (!kIsWeb) {
+                      final birthdays = ref.read(birthdayProvider).maybeWhen(
+                          data: (list) => list, orElse: () => <Birthday>[]);
+                      for (final b in birthdays) {
+                        await NotificationHelper.cancelAllForBirthday(b.id);
+                      }
+                    }
+                  },
                 ),
+                if (prefs.birthdayRemindersEnabled)
+                  _BirthdayRemindersList(),
                 ListTile(
                   title: const Text('Default reminders'),
                   subtitle: Text(
@@ -173,7 +197,14 @@ class SettingsScreen extends ConsumerWidget {
                           hour: prefs.dailyReminderHour,
                           minute: prefs.dailyReminderMinute,
                         );
-                        if (!ok) return;
+                        if (!ok) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text(
+                                  'Could not schedule the reminder — notifications may be disabled.'),
+                              backgroundColor: Colors.orange));
+                          return;
+                        }
                       }
                       await ref
                           .read(settingsPreferencesProvider.notifier)
@@ -322,26 +353,55 @@ class SettingsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, bool enable) async {
     final security = ref.read(securityProvider);
     if (enable) {
-      final pin = await _promptPin(context, 'Set a 4-digit PIN');
-      if (pin == null) return;
-      await ref.read(securityProvider.notifier).enableAppLock(pin);
+      // New PIN + confirmation — a typo here would permanently lock the
+      // user out of their own data.
+      String? newPin;
+      while (true) {
+        if (!context.mounted) return;
+        final first = await _promptPin(context, 'Set a 4-digit PIN');
+        if (first == null) return;
+        if (!context.mounted) return;
+        final confirm = await _promptPin(context, 'Confirm your PIN');
+        if (confirm == null) return;
+        if (confirm == first) {
+          newPin = confirm;
+          break;
+        }
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('PINs did not match. Try again.'),
+            backgroundColor: Colors.orange));
+      }
+      await ref.read(securityProvider.notifier).enableAppLock(newPin);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('App Lock enabled')));
       }
     } else {
-      // Require the current PIN before the lock can be removed.
+      // Require the current PIN before the lock can be removed. Use strict
+      // verification so broken secure storage offers recovery instead of an
+      // endless 'incorrect PIN' loop.
       if (security.hasPin) {
-        final pin = await _promptPin(context, 'Enter current PIN to disable');
-        if (pin == null) return;
-        final ok = await ref.read(securityProvider.notifier).verifyPin(pin);
-        if (!ok) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Current PIN was incorrect'),
-                backgroundColor: Colors.red));
+        String? pin;
+        while (true) {
+          if (!context.mounted) return;
+          pin = await _promptPin(context, 'Enter current PIN to disable');
+          if (pin == null) return;
+          final result = await ref
+              .read(securityProvider.notifier)
+              .verifyPinStrict(pin);
+          if (result == 'ok') break;
+          if (!context.mounted) return;
+          if (result == 'error') {
+            final recover = await _offerStorageRecovery(context);
+            if (!context.mounted) return;
+            if (recover != true) return;
+            // Recovery accepted: skip the PIN check and remove the lock.
+            break;
           }
-          return;
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Current PIN was incorrect'),
+              backgroundColor: Colors.red));
         }
       }
       await ref.read(securityProvider.notifier).disableAppLock();
@@ -471,8 +531,10 @@ class SettingsScreen extends ConsumerWidget {
     var canSave = controller.text.length == 4;
     final pin = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
+      builder: (dialogContext) => DisposeOnExit(
+        controllers: [controller],
+        child: StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
           title: Text(title),
           content: TextField(
             controller: controller,
@@ -501,10 +563,10 @@ class SettingsScreen extends ConsumerWidget {
               child: const Text('Save'),
             ),
           ],
+          ),
         ),
       ),
     );
-    controller.dispose();
     return pin;
   }
 
@@ -579,6 +641,17 @@ class SettingsScreen extends ConsumerWidget {
       await ref.read(taskProvider.notifier).loadTasks();
       await ref.read(categoriesProvider.notifier).loadCategories();
       await ref.read(habitsProvider.notifier).loadHabits();
+      // Reload every other provider backed by the restored DB/prefs so the
+      // whole UI reflects the import immediately (not just after restart).
+      ref.invalidate(checklistProvider);
+      ref.invalidate(birthdayProvider);
+      ref.invalidate(focusProvider);
+      ref.invalidate(profileProvider);
+      ref.invalidate(settingsPreferencesProvider);
+      // Security prefs (app lock, biometrics, timeout) and the theme are
+      // backed by prefs too; reload without re-locking an unlocked session.
+      await ref.read(securityProvider.notifier).reloadAfterRestore();
+      await ref.read(settingsProvider.notifier).ensureLoaded();
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -725,6 +798,95 @@ class _FaceIdTileState extends ConsumerState<_FaceIdTile> {
               : 'No face recognition enrolled on this device'),
       value: security.faceIdEnabled && security.faceIdAvailable,
       onChanged: (!_verifying && security.faceIdAvailable) ? _onToggle : null,
+    );
+  }
+}
+
+/// Shows a compact list of all birthdays with their reminder configuration
+/// directly in the Notifications section, so users can see at a glance which
+/// birthdays have upcoming reminders.
+class _BirthdayRemindersList extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final birthdays = ref.watch(birthdayProvider);
+    final theme = Theme.of(context);
+
+    return birthdays.when(
+      data: (list) {
+        if (list.isEmpty) return const SizedBox.shrink();
+
+        final upcoming = list.where((b) => b.daysUntilNext() <= 60).toList();
+        if (upcoming.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Upcoming birthday reminders',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              ...upcoming.take(5).map((b) {
+                final days = b.daysUntilNext();
+                final reminderLabels = b.reminderDaysBefore.map((d) {
+                  if (d == 0) return 'on day';
+                  return '${d}d before';
+                }).join(', ');
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cake_rounded,
+                          size: 16, color: Colors.pink),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          b.name,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        days == 0 ? 'Today!' : 'in $days days',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: days <= 3 ? Colors.pink : Colors.grey[600],
+                          fontWeight:
+                              days <= 3 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '($reminderLabels)',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[500],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              if (list.length > 5)
+                Text(
+                  '+${list.length - 5} more',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[500],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

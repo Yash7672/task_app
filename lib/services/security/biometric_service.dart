@@ -11,6 +11,8 @@ class BiometricService {
       final isDeviceSupported = await _auth.isDeviceSupported();
       if (!canCheck || !isDeviceSupported) return false;
       final enrolled = await _auth.getAvailableBiometrics();
+      debugPrint('PYLO biometrics reported by device: '
+          '${enrolled.map((b) => b.name).toList()}');
       return enrolled.isNotEmpty;
     } catch (e) {
       debugPrint('Biometric availability check failed: $e');

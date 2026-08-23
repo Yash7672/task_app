@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/dialog_disposer.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
 import '../widgets/habit_card.dart';
@@ -93,8 +94,9 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
           }
 
           final sortedHabits = List<Habit>.from(habits);
-          sortedHabits
-              .sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+          sortedHabits.sort((a, b) => b
+              .effectiveCurrentStreak()
+              .compareTo(a.effectiveCurrentStreak()));
 
           return CustomScrollView(
             slivers: [
@@ -196,6 +198,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'streaks_fab',
         onPressed: () async {
           final createdHabit = await _showHabitDialog(context);
           if (createdHabit != null) {
@@ -215,56 +218,59 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
 
     return showDialog<Habit>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(habit == null ? 'Add Streak' : 'Edit Streak'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Streak Name',
-                prefixIcon: Icon(Icons.local_fire_department),
+      builder: (context) => DisposeOnExit(
+        controllers: [nameController, descriptionController],
+        child: AlertDialog(
+          title: Text(habit == null ? 'Add Streak' : 'Edit Streak'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Streak Name',
+                  prefixIcon: Icon(Icons.local_fire_department),
+                ),
+                autofocus: true,
               ),
-              autofocus: true,
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  prefixIcon: Icon(Icons.description_outlined),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                prefixIcon: Icon(Icons.description_outlined),
-              ),
-              maxLines: 2,
+            FilledButton(
+              onPressed: () {
+                if (nameController.text.trim().isNotEmpty) {
+                  Navigator.pop(
+                    context,
+                    Habit(
+                      id: habit?.id,
+                      name: nameController.text.trim(),
+                      description: descriptionController.text.trim(),
+                      currentStreak: habit?.currentStreak ?? 0,
+                      bestStreak: habit?.bestStreak ?? 0,
+                      lastCompletedDate: habit?.lastCompletedDate,
+                      createdAt: habit?.createdAt,
+                      updatedAt: habit?.updatedAt,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Create'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (nameController.text.trim().isNotEmpty) {
-                Navigator.pop(
-                  context,
-                  Habit(
-                    id: habit?.id,
-                    name: nameController.text.trim(),
-                    description: descriptionController.text.trim(),
-                    currentStreak: habit?.currentStreak ?? 0,
-                    bestStreak: habit?.bestStreak ?? 0,
-                    lastCompletedDate: habit?.lastCompletedDate,
-                    createdAt: habit?.createdAt,
-                    updatedAt: habit?.updatedAt,
-                  ),
-                );
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
       ),
     );
   }

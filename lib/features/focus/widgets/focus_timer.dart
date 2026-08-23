@@ -60,7 +60,9 @@ class _FocusTimerState extends State<FocusTimer> {
               backgroundColor:
                   theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
               valueColor: AlwaysStoppedAnimation<Color>(
-                remaining.inMinutes < 5 ? Colors.orange : theme.colorScheme.primary,
+                remaining.inMinutes < 5 && remaining.inSeconds > 0
+                    ? theme.colorScheme.tertiary
+                    : theme.colorScheme.primary,
               ),
             ),
           ),
@@ -76,7 +78,8 @@ class _FocusTimerState extends State<FocusTimer> {
               Text(
                 '🔥 FOCUS MODE',
                 style: theme.textTheme.labelLarge?.copyWith(
-                    color: Colors.deepPurple, fontWeight: FontWeight.w700),
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w700),
               ),
             ],
           ),

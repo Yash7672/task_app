@@ -61,6 +61,31 @@ void main() {
       expect(next.dueDate, DateTime(2026, 2, 15));
     });
 
+    test('monthly preserves time of day', () {
+      final task = Task(
+        title: 'Pay rent',
+        category: 'Finance',
+        dueDate: DateTime(2026, 1, 31, 14, 30),
+        repeatRule: 'Monthly',
+      );
+
+      // Jan 31 clamps to Feb 28 but must keep the 14:30 time.
+      final next = task.nextOccurrence();
+      expect(next.dueDate, DateTime(2026, 2, 28, 14, 30));
+    });
+
+    test('weekly crosses month boundaries on the calendar day', () {
+      final task = Task(
+        title: 'Weekly review',
+        category: 'Work',
+        dueDate: DateTime(2026, 1, 28, 9, 0),
+        repeatRule: 'Weekly',
+      );
+
+      final next = task.nextOccurrence();
+      expect(next.dueDate, DateTime(2026, 2, 4, 9, 0));
+    });
+
     test('yearly advances the year', () {
       final task = Task(
         title: 'Renew insurance',

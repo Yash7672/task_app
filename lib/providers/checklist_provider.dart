@@ -125,15 +125,18 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
   }
 
   Future<void> deleteItem(ChecklistItem item) async {
+    // Optimistic update first so the swiped row leaves the tree on the same
+    // frame (avoids 'dismissed Dismissible still part of the tree').
+    final items = {...state.items};
+    final list = [...(items[item.checklistId] ?? const <ChecklistItem>[])];
+    list.removeWhere((i) => i.id == item.id);
+    items[item.checklistId] = list;
+    state = ChecklistsState(checklists: state.checklists, items: items);
     try {
       await dbHelper.deleteChecklistItem(item.id, item.checklistId);
-      final items = {...state.items};
-      final list = [...(items[item.checklistId] ?? const <ChecklistItem>[])];
-      list.removeWhere((i) => i.id == item.id);
-      items[item.checklistId] = list;
-      state = ChecklistsState(checklists: state.checklists, items: items);
     } catch (e) {
       debugPrint('Error deleting checklist item: $e');
+      await loadChecklists();
     }
   }
 

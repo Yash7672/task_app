@@ -83,7 +83,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   radius: 42,
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   child: Text(
-                    profile.name.isEmpty
+                    profile.name.trim().isEmpty
                         ? 'U'
                         : profile.name.trim()[0].toUpperCase(),
                     style: const TextStyle(fontSize: 32, color: Colors.white),

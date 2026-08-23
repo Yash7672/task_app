@@ -14,10 +14,12 @@ class StatsScreen extends ConsumerWidget {
     final focusState = ref.watch(focusProvider);
     final theme = Theme.of(context);
 
-    final completed = tasks.where((task) => task.isCompleted).length;
-    final pending =
-        tasks.where((task) => !task.isCompleted && !task.isArchived).length;
-    final total = tasks.where((task) => !task.isArchived).length;
+    // Count consistently over non-archived tasks so "Completed" can never
+    // exceed "Total Tasks".
+    final active = tasks.where((task) => !task.isArchived).toList();
+    final completed = active.where((task) => task.isCompleted).length;
+    final pending = active.where((task) => !task.isCompleted).length;
+    final total = active.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Statistics')),

@@ -86,22 +86,51 @@ class SecurityState {
 }
 
 class SecurityNotifier extends StateNotifier<SecurityState> {
+  /// Failed-PIN throttling: after [maxPinAttempts] wrong tries the lock
+  /// screen refuses further attempts for a backoff window that doubles with
+  /// every extra failure (capped at 15 min) and survives app restarts.
+  static const int maxPinAttempts = 5;
+  static const Duration _baseLockout = Duration(seconds: 30);
+  static const Duration _maxLockout = Duration(minutes: 15);
+
   SecurityNotifier() : super(const SecurityState()) {
     load();
   }
 
   DateTime? _pausedAt;
+  int _failedAttempts = 0;
+  DateTime? _lockoutUntil;
+
+  /// Number of consecutive wrong PINs since the last successful unlock.
+  int get pinFailedAttempts => _failedAttempts;
+
+  bool get isPinLockedOut =>
+      _lockoutUntil != null && DateTime.now().isBefore(_lockoutUntil!);
+
+  /// Seconds left in the current lockout window (0 when none).
+  int get pinLockoutSecondsLeft {
+    if (!isPinLockedOut) return 0;
+    return _lockoutUntil!.difference(DateTime.now()).inSeconds + 1;
+  }
 
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final hasPin = await PinService.hasPin();
-      final appLockEnabled = prefs.getBool('app_lock_enabled') ?? false;
+      var appLockEnabled = prefs.getBool('app_lock_enabled') ?? false;
+
+      // Restore brute-force throttling state (survives restarts so killing
+      // the app cannot bypass the backoff window).
+      _failedAttempts = prefs.getInt('pin_failed_attempts') ?? 0;
+      final lockoutMs = prefs.getInt('pin_lockout_until_ms');
+      _lockoutUntil =
+          lockoutMs != null ? DateTime.fromMillisecondsSinceEpoch(lockoutMs) : null;
 
       // Self-heal: if the PIN was lost (keystore reset / storage migration)
       // while App Lock was on, turn the lock off so the user can set a
       // fresh PIN instead of being permanently locked out.
       if (appLockEnabled && !hasPin) {
+        appLockEnabled = false;
         await prefs.setBool('app_lock_enabled', false);
         await prefs.setBool('biometric_enabled', false);
         await prefs.setBool('face_id_enabled', false);
@@ -129,6 +158,18 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     }
   }
 
+  /// Re-reads preference-backed fields (e.g. after a backup import) while
+  /// KEEPING the current lock state — a plain [load] would re-lock an
+  /// unlocked session out of nowhere.
+  Future<void> reloadAfterRestore() async {
+    final wasLocked = state.isLocked;
+    await load();
+    if (!mounted) return;
+    if (!wasLocked) {
+      state = state.copyWith(isLocked: false);
+    }
+  }
+
   Future<bool> enableAppLock(String pin) async {
     await PinService.setPin(pin);
     final prefs = await SharedPreferences.getInstance();
@@ -136,7 +177,9 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     state = state.copyWith(
       appLockEnabled: true,
       hasPin: true,
-      isLocked: true,
+      // Do NOT lock right away: the user just proved they know this PIN by
+      // setting it. Locking here yanks the UI out from under them.
+      isLocked: false,
     );
     return true;
   }
@@ -219,6 +262,33 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     return PinService.verifyPin(pin);
   }
 
+  /// [verifyPin] plus brute-force throttling. Returns false both for a wrong
+  /// PIN and while locked out — callers should check [isPinLockedOut] to
+  /// tell the user which happened.
+  Future<bool> verifyPinWithThrottle(String pin) async {
+    if (isPinLockedOut) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final ok = await PinService.verifyPin(pin);
+    if (ok) {
+      _failedAttempts = 0;
+      _lockoutUntil = null;
+      await prefs.remove('pin_failed_attempts');
+      await prefs.remove('pin_lockout_until_ms');
+      return true;
+    }
+    _failedAttempts += 1;
+    await prefs.setInt('pin_failed_attempts', _failedAttempts);
+    if (_failedAttempts >= maxPinAttempts) {
+      final extraFailures = _failedAttempts - maxPinAttempts;
+      var lockout = _baseLockout * (1 << extraFailures.clamp(0, 8));
+      if (lockout > _maxLockout) lockout = _maxLockout;
+      _lockoutUntil = DateTime.now().add(lockout);
+      await prefs.setInt(
+          'pin_lockout_until_ms', _lockoutUntil!.millisecondsSinceEpoch);
+    }
+    return false;
+  }
+
   Future<void> setLockTimeout(LockTimeout timeout) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('lock_timeout', timeout.name);
@@ -228,6 +298,15 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   void unlock() {
     state = state.copyWith(isLocked: false);
     _pausedAt = null;
+    // A successful unlock (PIN or biometric) resets the throttle.
+    if (_failedAttempts > 0 || _lockoutUntil != null) {
+      _failedAttempts = 0;
+      _lockoutUntil = null;
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.remove('pin_failed_attempts');
+        prefs.remove('pin_lockout_until_ms');
+      });
+    }
   }
 
   void lockNow() {

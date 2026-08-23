@@ -116,16 +116,18 @@ class FocusService {
     await prefs.remove(_keyMinutes);
 
     try {
+      // Record the ACTUAL end: finishing or abandoning a session early must
+      // not credit the full planned duration to stats. Sessions that ran past
+      // their planned end (e.g. restored after a force-kill) cap at the plan.
+      final now = DateTime.now();
+      final effectiveEnd =
+          now.isBefore(session.endTime) ? now : session.endTime;
       await DatabaseHelper.instance.createFocusSession(
         FocusSession(
           taskId: session.taskId,
           label: session.label,
           startTime: session.startTime,
-          endTime: completed
-              ? session.endTime
-              : DateTime.now().isBefore(session.endTime)
-                  ? DateTime.now()
-                  : session.endTime,
+          endTime: effectiveEnd,
           plannedMinutes: session.plannedMinutes,
           completed: completed,
         ),

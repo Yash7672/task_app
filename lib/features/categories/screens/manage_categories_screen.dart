@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import '../../../core/widgets/dialog_disposer.dart';
 import '../../../models/category_model.dart';
 import '../../../providers/task_provider.dart';
 
@@ -21,6 +21,7 @@ class ManageCategoriesScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Manage Categories')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'categories_fab',
         onPressed: () => _showCategoryDialog(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('Add'),
@@ -86,7 +87,9 @@ class ManageCategoriesScreen extends ConsumerWidget {
 
     final result = await showDialog<TaskCategory>(
       context: context,
-      builder: (context) => StatefulBuilder(
+      builder: (context) => DisposeOnExit(
+        controllers: [nameController],
+        child: StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title:
               Text(category == null ? 'Add Category' : 'Edit Category'),
@@ -167,26 +170,51 @@ class ManageCategoriesScreen extends ConsumerWidget {
             ),
           ],
         ),
+        ),
       ),
     );
 
     if (result == null) return;
     final notifier = ref.read(categoriesProvider.notifier);
-    if (category == null) {
-      await notifier.addCategory(result);
-    } else {
-      await notifier.updateCategory(result);
+    try {
+      if (category == null) {
+        await notifier.addCategory(result);
+      } else {
+        await notifier.updateCategory(result);
+        // Tasks store categories by NAME: after a rename the DB rows are
+        // reassigned, but the in-memory task list still holds the old name.
+        await ref.read(taskProvider.notifier).loadTasks();
+      }
+    } on StateError catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.orange));
+      // Re-open the dialog so the user can correct the name.
+      if (context.mounted) {
+        _showCategoryDialog(context, ref, category: category);
+      }
+      return;
     }
   }
 
   Future<void> _confirmDelete(
       BuildContext context, WidgetRef ref, TaskCategory category) async {
+    final categories = ref.read(categoriesProvider).maybeWhen(
+        data: (list) => list, orElse: () => <TaskCategory>[]);
+    final fallback = categories.any((c) =>
+        c.id != category.id && c.name.toLowerCase() == 'personal')
+        ? 'Personal'
+        : (categories.length > 1
+            ? categories.firstWhere((c) => c.id != category.id).name
+            : null);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete category?'),
-        content: Text(
-            '"${category.name}" will be removed. Tasks in this category move to "Personal".'),
+        content: Text(fallback == null
+            ? '"${category.name}" will be removed.'
+            : '"${category.name}" will be removed. Tasks in this category move to "$fallback".'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -199,8 +227,17 @@ class ManageCategoriesScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed == true) {
-      await ref.read(categoriesProvider.notifier).deleteCategory(category);
+    if (confirmed != true) return;
+    final ok =
+        await ref.read(categoriesProvider.notifier).deleteCategory(category);
+    if (ok) {
+      // Reassigned tasks must be re-read so chips/filters drop the old name.
+      await ref.read(taskProvider.notifier).loadTasks();
+    }
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not delete the category.'),
+          backgroundColor: Colors.red));
     }
   }
 

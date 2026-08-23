@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,14 +21,34 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   bool _authenticating = false;
   IconData _biometricIcon = Icons.fingerprint;
 
+  /// Drives the visible lockout countdown while it is active.
+  Timer? _lockoutTicker;
+  int _lockoutSecondsLeft = 0;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadBiometricIcon();
+      _syncLockout();
       _maybeAutoBiometric();
     });
+  }
+
+  void _syncLockout() {
+    final notifier = ref.read(securityProvider.notifier);
+    final seconds = notifier.pinLockoutSecondsLeft;
+    if (seconds == _lockoutSecondsLeft) return;
+    setState(() => _lockoutSecondsLeft = seconds);
+    if (seconds > 0) {
+      _lockoutTicker ??=
+          Timer.periodic(const Duration(seconds: 1), (_) => _syncLockout());
+    } else {
+      _lockoutTicker?.cancel();
+      _lockoutTicker = null;
+      if (_errorText != null && mounted) setState(() => _errorText = null);
+    }
   }
 
   Future<void> _loadBiometricIcon() async {
@@ -41,6 +63,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _lockoutTicker?.cancel();
     super.dispose();
   }
 
@@ -71,6 +94,13 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
 
   Future<void> _authenticateWithBiometric() async {
     if (_authenticating) return;
+    final notifier = ref.read(securityProvider.notifier);
+    // Biometrics are also blocked while the PIN lockout is active, otherwise
+    // the throttle could be bypassed with a single fingerprint scan.
+    if (notifier.isPinLockedOut) {
+      _syncLockout();
+      return;
+    }
     _authenticating = true;
     final security = ref.read(securityProvider);
     final reason = (security.faceIdEnabled && security.faceIdAvailable)
@@ -81,25 +111,43 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     if (!mounted) return;
     if (success) {
       ref.read(securityProvider.notifier).unlock();
+      setState(() => _errorText = null);
     } else {
       setState(() => _errorText = 'Biometric failed. Enter PIN.');
     }
   }
 
   Future<void> _onPinEntered(String pin) async {
-    final valid = await ref.read(securityProvider.notifier).verifyPin(pin);
+    final notifier = ref.read(securityProvider.notifier);
+    final valid = await notifier.verifyPinWithThrottle(pin);
     if (!mounted) return;
     if (valid) {
-      ref.read(securityProvider.notifier).unlock();
+      notifier.unlock();
       setState(() => _errorText = null);
+    } else if (notifier.isPinLockedOut) {
+      setState(() => _errorText =
+          'Too many attempts. Try again in $_lockoutSecondsLeft s.');
+      _syncLockout();
     } else {
-      setState(() => _errorText = 'Incorrect PIN');
+      final left =
+          SecurityNotifier.maxPinAttempts - notifier.pinFailedAttempts;
+      setState(() => _errorText = 'Incorrect PIN'
+          '${left > 0 && left <= 2 ? ' — $left attempt${left == 1 ? '' : 's'} left' : ''}');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final security = ref.watch(securityProvider);
+
+    // The first post-frame callback races the async security load (isLoading
+    // is still true then), so retry the auto-prompt once loading completes.
+    ref.listen<SecurityState>(securityProvider, (previous, next) {
+      if ((previous?.isLoading ?? true) && !next.isLoading) {
+        _loadBiometricIcon();
+        _maybeAutoBiometric();
+      }
+    });
 
     if (security.isLoading) {
       return const Scaffold(
@@ -120,14 +168,29 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       return const AppNavigation();
     }
 
+    final lockedOut = _lockoutSecondsLeft > 0;
+    String? errorText = _errorText;
+    if (lockedOut) {
+      errorText = 'Too many attempts. Try again in $_lockoutSecondsLeft s.';
+    }
+
     return Scaffold(
       body: PinPad(
         title: 'PYLO is locked',
-        errorText: _errorText,
+        errorText: errorText,
         onPinCompleted: _onPinEntered,
-        showBiometric: security.shouldOfferAnyBiometric,
+        showBiometric:
+            security.shouldOfferAnyBiometric && !lockedOut,
         onBiometricRequested: _authenticateWithBiometric,
         biometricIcon: _biometricIcon,
+        enabled: !lockedOut,
+        onInputChanged: errorText == null
+            ? null
+            : () {
+                if (mounted && !lockedOut) {
+                  setState(() => _errorText = null);
+                }
+              },
       ),
     );
   }

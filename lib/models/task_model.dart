@@ -261,11 +261,15 @@ class Task {
     }
 
     final DateTime nextDate;
+    // Component-based date math: DateTime.add() works in absolute time, so a
+    // DST transition shifts 'daily'/'weekly' results to 23:00 the previous
+    // day (fall-back) or 01:00 (spring-forward). Building dates from
+    // components keeps occurrences on the intended calendar day and hour.
     switch (repeatRule.toLowerCase()) {
       case 'daily':
-        nextDate = dueDate.add(const Duration(days: 1));
+        nextDate = _atTime(dueDate.day + 1);
       case 'weekly':
-        nextDate = dueDate.add(const Duration(days: 7));
+        nextDate = _atTime(dueDate.day + 7);
       case 'monthly':
         var year = dueDate.year;
         var month = dueDate.month + 1;
@@ -275,14 +279,15 @@ class Task {
         }
         final lastDay = DateTime(year, month + 1, 0).day;
         nextDate =
-            DateTime(year, month, dueDate.day.clamp(1, lastDay));
+            DateTime(year, month, dueDate.day.clamp(1, lastDay), dueDate.hour,
+                dueDate.minute);
       case 'yearly':
         final year = dueDate.year + 1;
         final lastDay = DateTime(year, dueDate.month + 1, 0).day;
-        nextDate = DateTime(
-            year, dueDate.month, dueDate.day.clamp(1, lastDay));
+        nextDate = DateTime(year, dueDate.month,
+            dueDate.day.clamp(1, lastDay), dueDate.hour, dueDate.minute);
       default:
-        nextDate = dueDate.add(const Duration(days: 1));
+        nextDate = _atTime(dueDate.day + 1);
     }
 
     return copyWith(
@@ -291,6 +296,13 @@ class Task {
       completedAt: null,
       updatedAt: DateTime.now(),
     );
+  }
+
+  /// [nextOccurrence] helper: same clock time as [dueDate], shifted by
+  /// [dayOffset] calendar days (Dart normalizes day overflow across months).
+  DateTime _atTime(int dayOffset) {
+    return DateTime(dueDate.year, dueDate.month, dayOffset, dueDate.hour,
+        dueDate.minute);
   }
 
   Task regenerate() {
@@ -306,6 +318,8 @@ class Task {
       dueDate: next.dueDate,
       startTime: startTime?.add(delta),
       endTime: endTime?.add(delta),
+      isFavorite: isFavorite,
+      isPinned: isPinned,
       notes: notes,
       repeatRule: repeatRule,
       color: color,

@@ -239,6 +239,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       isDeleted: widget.taskToEdit?.isDeleted ?? false,
       isFavorite: widget.taskToEdit?.isFavorite ?? false,
       isPinned: widget.taskToEdit?.isPinned ?? false,
+      completedAt: widget.taskToEdit?.completedAt,
       createdAt: widget.taskToEdit?.createdAt,
       color: widget.taskToEdit?.color ?? '',
     );

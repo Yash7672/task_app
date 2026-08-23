@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/dialog_disposer.dart';
 
 import '../../../models/birthday_model.dart';
 import '../../../providers/birthday_provider.dart';
@@ -17,6 +18,7 @@ class BirthdaysScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('🎂 Birthdays')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'birthdays_fab',
         onPressed: () => _showBirthdayDialog(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('Add Birthday'),
@@ -87,7 +89,9 @@ class BirthdaysScreen extends ConsumerWidget {
 
     final result = await showDialog<Birthday>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext) => DisposeOnExit(
+        controllers: [nameController, phoneController, notesController],
+        child: StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(birthday == null ? 'Add Birthday' : 'Edit Birthday'),
           content: SingleChildScrollView(
@@ -190,6 +194,7 @@ class BirthdaysScreen extends ConsumerWidget {
               child: Text(birthday == null ? 'Add' : 'Save'),
             ),
           ],
+        ),
         ),
       ),
     );

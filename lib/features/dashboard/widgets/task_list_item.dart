@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/notification_helper.dart';
 import '../../../features/tasks/screens/add_edit_task_screen.dart';
 import '../../../models/task_model.dart';
+import '../../../providers/preferences_provider.dart';
 import '../../../providers/task_provider.dart';
 import '../../../utils/extensions.dart';
 
@@ -37,7 +38,11 @@ class TaskListItem extends ConsumerWidget {
               label: 'Undo',
               onPressed: () {
                 ref.read(taskProvider.notifier).restoreTask(task.id);
-                _scheduleReminderIfNeeded(task);
+                if (ref
+                    .read(settingsPreferencesProvider)
+                    .notificationsEnabled) {
+                  _scheduleReminderIfNeeded(task);
+                }
               },
             ),
           ),
@@ -69,7 +74,12 @@ class TaskListItem extends ConsumerWidget {
                     activeColor: theme.colorScheme.primary,
                     onChanged: (_) => ref
                         .read(taskProvider.notifier)
-                        .toggleTaskCompletion(task),
+                        .toggleTaskCompletion(
+                          task,
+                          notificationsEnabled: ref
+                              .read(settingsPreferencesProvider)
+                              .notificationsEnabled,
+                        ),
                   ),
                 ),
                 title: Row(
@@ -154,7 +164,11 @@ class TaskListItem extends ConsumerWidget {
                         ref
                             .read(taskProvider.notifier)
                             .restoreTaskFromModel(task);
-                        _scheduleReminderIfNeeded(task);
+                        if (ref
+                            .read(settingsPreferencesProvider)
+                            .notificationsEnabled) {
+                          _scheduleReminderIfNeeded(task);
+                        }
                         break;
                       case 'delete':
                         _confirmPermanentDelete(context, task, ref);

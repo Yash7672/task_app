@@ -23,17 +23,35 @@ class Birthday {
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
+  static bool _isLeapYear(int year) =>
+      (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+
+  /// Occurrence of the birthday within [year]. Feb 29 birthdays are clamped
+  /// to Feb 28 in common years (DateTime would otherwise roll over to Mar 1).
+  DateTime _occurrenceIn(int year) {
+    var day = birthDate.day;
+    if (birthDate.month == 2 && day == 29 && !_isLeapYear(year)) {
+      day = 28;
+    }
+    return DateTime(year, birthDate.month, day);
+  }
+
   DateTime nextOccurrence({DateTime? now}) {
     final today = _dateOnly(now ?? DateTime.now());
-    var next = DateTime(today.year, birthDate.month, birthDate.day);
+    var next = _occurrenceIn(today.year);
     if (next.isBefore(today)) {
-      next = DateTime(today.year + 1, birthDate.month, birthDate.day);
+      next = _occurrenceIn(today.year + 1);
     }
     return next;
   }
 
   int daysUntilNext({DateTime? now}) {
-    return nextOccurrence(now: now).difference(_dateOnly(now ?? DateTime.now())).inDays;
+    final today = _dateOnly(now ?? DateTime.now());
+    final next = nextOccurrence(now: today);
+    // Compare via UTC midnights so DST shifts can never skew the day count.
+    return DateTime.utc(next.year, next.month, next.day)
+        .difference(DateTime.utc(today.year, today.month, today.day))
+        .inDays;
   }
 
   int get ageTurningThisYear {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import '../models/birthday_model.dart';
@@ -74,11 +75,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 4) {
       final columns = await db.rawQuery('PRAGMA table_info(tasks)');
-      final hasNew = columns.any((c) => c['name'] == 'reminderMinutes');
+      var hasNew = columns.any((c) => c['name'] == 'reminderMinutes');
       final hasOld = columns.any((c) => c['name'] == 'reminderMinutesBefore');
       if (!hasNew) {
         await db.execute(
             "ALTER TABLE tasks ADD COLUMN reminderMinutes TEXT DEFAULT '[]'");
+        hasNew = true;
       }
       if (hasOld && hasNew) {
         final rows = await db.query('tasks', columns: ['id', 'reminderMinutesBefore', 'reminderMinutes']);
@@ -98,9 +100,16 @@ class DatabaseHelper {
             );
           }
         }
-        await db.execute('ALTER TABLE tasks DROP COLUMN reminderMinutesBefore');
+        // DROP COLUMN needs SQLite >= 3.35; on older devices the leftover
+        // column is harmless (Task.fromMap ignores it once reminderMinutes
+        // is populated), so swallow the failure instead of breaking upgrade.
+        try {
+          await db
+              .execute('ALTER TABLE tasks DROP COLUMN reminderMinutesBefore');
+        } catch (e) {
+          debugPrint('reminderMinutesBefore drop skipped: $e');
+        }
       }
-      await _createIndexes(db);
     }
     if (oldVersion < 5) {
       await _createV5Tables(db);
@@ -110,6 +119,11 @@ class DatabaseHelper {
     }
     if (oldVersion < 7) {
       await _createV7Tables(db);
+    }
+    // Indexes must run AFTER every table exists: on upgrade paths the
+    // checklist_items / focus_sessions tables are only created in v5.
+    if (oldVersion > 0 && oldVersion < schemaVersion) {
+      await _createIndexes(db);
     }
   }
 
@@ -163,16 +177,34 @@ class DatabaseHelper {
   }
 
   Future<void> _createIndexes(Database db) async {
-    final indexes = [
-      'CREATE INDEX IF NOT EXISTS idx_tasks_isDeleted_isArchived ON tasks(isDeleted, isArchived)',
-      'CREATE INDEX IF NOT EXISTS idx_tasks_dueDate ON tasks(dueDate)',
-      'CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)',
-      'CREATE INDEX IF NOT EXISTS idx_habit_logs_habitId ON habit_logs(habitId)',
-      'CREATE INDEX IF NOT EXISTS idx_checklist_items_checklistId ON checklist_items(checklistId)',
-      'CREATE INDEX IF NOT EXISTS idx_focus_sessions_start ON focus_sessions(startTime)',
-    ];
-    for (final sql in indexes) {
-      await db.execute(sql);
+    final indexTargets = <String, List<String>>{
+      'tasks': [
+        'CREATE INDEX IF NOT EXISTS idx_tasks_isDeleted_isArchived ON tasks(isDeleted, isArchived)',
+        'CREATE INDEX IF NOT EXISTS idx_tasks_dueDate ON tasks(dueDate)',
+        'CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)',
+      ],
+      'habit_logs': [
+        'CREATE INDEX IF NOT EXISTS idx_habit_logs_habitId ON habit_logs(habitId)',
+      ],
+      'checklist_items': [
+        'CREATE INDEX IF NOT EXISTS idx_checklist_items_checklistId ON checklist_items(checklistId)',
+      ],
+      'focus_sessions': [
+        'CREATE INDEX IF NOT EXISTS idx_focus_sessions_start ON focus_sessions(startTime)',
+      ],
+    };
+
+    // Skip indexes whose table does not exist yet (partial upgrade paths).
+    final existingTables = (await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"))
+        .map((row) => row['name'] as String)
+        .toSet();
+
+    for (final entry in indexTargets.entries) {
+      if (!existingTables.contains(entry.key)) continue;
+      for (final sql in entry.value) {
+        await db.execute(sql);
+      }
     }
   }
 
@@ -370,11 +402,17 @@ class DatabaseHelper {
 
   Future<List<Task>> searchTasks(String query) async {
     final db = await database;
-    final value = '%$query%';
+    final escaped = query
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
+    final value = '%$escaped%';
+    const likeClause =
+        "(title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' "
+        "OR notes LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\')";
     final result = await db.query(
       'tasks',
-      where:
-          '(title LIKE ? OR description LIKE ? OR notes LIKE ? OR category LIKE ?) AND isDeleted = 0 AND isArchived = 0',
+      where: '$likeClause AND isDeleted = 0 AND isArchived = 0',
       whereArgs: [value, value, value, value],
       orderBy: 'dueDate ASC',
     );
@@ -494,7 +532,10 @@ class DatabaseHelper {
     final db = await database;
     return db.update(
       'tasks',
-      {'category': toName},
+      {
+        'category': toName,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      },
       where: 'category = ?',
       whereArgs: [fromName],
     );
@@ -774,10 +815,14 @@ class DatabaseHelper {
     final db = await database;
     final endMs =
         (rangeEnd ?? DateTime.now()).millisecondsSinceEpoch;
+    // Overlap (not containment) so sessions crossing the range boundary are
+    // counted for the minutes that actually fall inside the range.
     final result = await db.rawQuery(
-      'SELECT SUM(endTime - startTime) as total FROM focus_sessions '
-      'WHERE startTime >= ? AND endTime <= ? AND completed = 1',
-      [rangeStart.millisecondsSinceEpoch, endMs],
+      'SELECT SUM(MIN(endTime, ?) - MAX(startTime, ?)) as total '
+      'FROM focus_sessions '
+      'WHERE completed = 1 AND startTime < ? AND endTime > ?',
+      [endMs, rangeStart.millisecondsSinceEpoch, endMs,
+       rangeStart.millisecondsSinceEpoch],
     );
     final total = result.first['total'];
     if (total is int) return total ~/ 60000;
@@ -794,35 +839,47 @@ class DatabaseHelper {
     _database = null;
   }
 
+  static const List<String> _knownTables = [
+    'tasks',
+    'categories',
+    'habits',
+    'habit_logs',
+    'habit_log_items',
+    'habit_completion_items',
+    'checklists',
+    'checklist_items',
+    'birthdays',
+    'focus_sessions'
+  ];
+
   Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
     final db = await database;
     final tables = <String, List<Map<String, dynamic>>>{};
-    for (final table in [
-      'tasks',
-      'categories',
-      'habits',
-      'habit_logs',
-      'habit_log_items',
-      'habit_completion_items',
-      'checklists',
-      'checklist_items',
-      'birthdays',
-      'focus_sessions'
-    ]) {
+    for (final table in _knownTables) {
       tables[table] = await db.query(table);
     }
     return tables;
   }
 
+  /// Replaces the contents of ALL known tables with [data].
+  ///
+  /// Only whitelisted table names are accepted (a corrupt/hand-edited backup
+  /// must not be able to run arbitrary SQL through table names), and every
+  /// table is cleared first so a partial backup cannot silently merge with
+  /// existing data.
   Future<void> importAllTables(
       Map<String, List<Map<String, dynamic>>> data) async {
     final db = await database;
     await db.transaction((txn) async {
-      for (final table in data.keys) {
+      // Wipe every known table regardless of what the backup contains so
+      // restore is a true replace, not a merge.
+      for (final table in _knownTables) {
         await txn.delete(table);
-        final rows = data[table] ?? const [];
-        for (final row in rows) {
-          await txn.insert(table, row,
+      }
+      for (final entry in data.entries) {
+        if (!_knownTables.contains(entry.key)) continue;
+        for (final row in entry.value) {
+          await txn.insert(entry.key, row,
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
       }

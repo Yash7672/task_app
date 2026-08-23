@@ -25,10 +25,10 @@ class TaskCategory {
 
   factory TaskCategory.fromMap(Map<String, dynamic> map) {
     return TaskCategory(
-      id: map['id'],
-      name: map['name'],
-      colorHex: map['colorHex'],
-      icon: map['icon'],
+      id: map['id']?.toString() ?? const Uuid().v4(),
+      name: map['name']?.toString() ?? 'Unnamed',
+      colorHex: map['colorHex']?.toString() ?? '#9E9E9E',
+      icon: map['icon']?.toString(),
     );
   }
 

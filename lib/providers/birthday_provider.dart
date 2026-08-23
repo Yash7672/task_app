@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,9 +16,31 @@ final birthdayProvider =
 
 class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
   final DatabaseHelper dbHelper;
+  Timer? _midnightTimer;
+  Future<void>? _appendQueue;
 
   BirthdayNotifier(this.dbHelper) : super(const AsyncValue.loading()) {
     loadBirthdays();
+    _armMidnightResort();
+  }
+
+  /// Countdowns are relative to "today"; re-sort when the day flips so the
+  /// app never shows yesterday's ordering while left open overnight.
+  void _armMidnightResort() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+    _midnightTimer = Timer(nextMidnight.difference(now), () {
+      if (!mounted) return;
+      _resort();
+      _armMidnightResort();
+    });
+  }
+
+  @override
+  void dispose() {
+    _midnightTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> loadBirthdays() async {
@@ -41,21 +65,25 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
 
   Future<void> addBirthday(Birthday birthday,
       {bool notificationsEnabled = true}) async {
-    try {
-      await dbHelper.createBirthday(birthday);
-      state = AsyncValue.data([..._current, birthday]);
-      _resort();
-      if (notificationsEnabled) {
-        await NotificationHelper.scheduleBirthdayReminders(
-          birthdayId: birthday.id,
-          name: birthday.name,
-          nextBirthday: birthday.nextOccurrence(),
-          reminderDaysBefore: birthday.reminderDaysBefore,
-        );
+    final run = (_appendQueue ?? Future.value()).then((_) async {
+      try {
+        await dbHelper.createBirthday(birthday);
+        state = AsyncValue.data([..._current, birthday]);
+        _resort();
+        if (notificationsEnabled) {
+          await NotificationHelper.scheduleBirthdayReminders(
+            birthdayId: birthday.id,
+            name: birthday.name,
+            nextBirthday: birthday.nextOccurrence(),
+            reminderDaysBefore: birthday.reminderDaysBefore,
+          );
+        }
+      } catch (e) {
+        debugPrint('Error adding birthday: $e');
       }
-    } catch (e) {
-      debugPrint('Error adding birthday: $e');
-    }
+    });
+    _appendQueue = run.catchError((Object _) {});
+    await run;
   }
 
   Future<void> updateBirthday(Birthday birthday,
@@ -91,6 +119,27 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
       state = AsyncValue.data(_current.where((b) => b.id != id).toList());
     } catch (e) {
       debugPrint('Error deleting birthday: $e');
+    }
+  }
+
+  /// (Re)schedules reminders for every existing birthday. Called when the
+  /// user turns Birthday reminders ON in Settings — without this, birthdays
+  /// added while notifications were off would never fire.
+  Future<void> rescheduleAllReminders() async {
+    for (final birthday in _current) {
+      try {
+        await NotificationHelper.scheduleBirthdayReminders(
+          birthdayId: birthday.id,
+          name: birthday.name,
+          nextBirthday: birthday.nextOccurrence(),
+          reminderDaysBefore: birthday.reminderDaysBefore,
+        );
+      } catch (e) {
+        debugPrint('Failed to reschedule birthday ${birthday.id}: $e');
+      }
+    }
+    if (_current.isNotEmpty) {
+      await loadBirthdays();
     }
   }
 }

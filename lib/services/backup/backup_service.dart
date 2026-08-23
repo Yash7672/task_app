@@ -33,6 +33,7 @@ class BackupService {
       'birthday_reminders_enabled',
       'app_lock_enabled',
       'biometric_enabled',
+      'face_id_enabled',
       'lock_timeout',
       'reminder_minutes',
       'daily_reminder_enabled',

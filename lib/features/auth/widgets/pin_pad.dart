@@ -9,6 +9,12 @@ class PinPad extends StatefulWidget {
   final bool showBiometric;
   final IconData biometricIcon;
 
+  /// When false (e.g. brute-force lockout) the pad ignores all input.
+  final bool enabled;
+
+  /// Fires on every digit press so owners can clear stale error text.
+  final VoidCallback? onInputChanged;
+
   const PinPad({
     super.key,
     required this.title,
@@ -17,6 +23,8 @@ class PinPad extends StatefulWidget {
     this.onBiometricRequested,
     this.showBiometric = false,
     this.biometricIcon = Icons.fingerprint,
+    this.enabled = true,
+    this.onInputChanged,
   });
 
   @override
@@ -27,8 +35,9 @@ class _PinPadState extends State<PinPad> {
   String _buffer = '';
 
   void _onDigit(String digit) {
-    if (_buffer.length >= 4) return;
+    if (!widget.enabled || _buffer.length >= 4) return;
     HapticFeedback.lightImpact();
+    widget.onInputChanged?.call();
     setState(() => _buffer += digit);
     if (_buffer.length == 4) {
       final pin = _buffer;
@@ -40,8 +49,9 @@ class _PinPadState extends State<PinPad> {
   }
 
   void _onBackspace() {
-    if (_buffer.isEmpty) return;
+    if (!widget.enabled || _buffer.isEmpty) return;
     HapticFeedback.selectionClick();
+    widget.onInputChanged?.call();
     setState(() => _buffer = _buffer.substring(0, _buffer.length - 1));
   }
 
@@ -130,7 +140,12 @@ class _PinPadState extends State<PinPad> {
                             onTap: widget.onBiometricRequested ?? () {},
                           )
                         else
-                          const SizedBox(width: 72, height: 60),
+                          // Same size + padding as _PadButton (78 + 2×5) so
+                          // the '0' stays centered when biometrics are off.
+                          const Padding(
+                            padding: EdgeInsets.all(5),
+                            child: SizedBox(width: 78, height: 60),
+                          ),
                         _PadButton(label: '0', onTap: () => _onDigit('0')),
                         _PadButton(
                           icon: Icons.backspace_outlined,

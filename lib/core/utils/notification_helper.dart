@@ -164,8 +164,12 @@ class NotificationHelper {
       return;
     }
     const maxReminders = 12;
-    for (int i = 0; i < maxReminders; i++) {
-      await _notifications.cancel(taskId.hashCode + i);
+    try {
+      for (int i = 0; i < maxReminders; i++) {
+        await _notifications.cancel(taskId.hashCode + i);
+      }
+    } catch (e) {
+      debugPrint('Failed to cancel notifications for task $taskId: $e');
     }
   }
 
@@ -216,7 +220,6 @@ class NotificationHelper {
 
     final dateStr =
         '${nextBirthday.day}/${nextBirthday.month}';
-    final age = nextBirthday.year;
 
     for (final days in reminderDaysBefore) {
       final when = nextBirthday.subtract(Duration(days: days));
@@ -226,8 +229,11 @@ class NotificationHelper {
               ? "🎂 $name's birthday is tomorrow! ($dateStr)"
               : "🎂 $name's birthday in $days days ($dateStr)";
 
+      // Stable id per (birthday, offset): re-scheduling overwrites the
+      // previous year's notification instead of stacking a new one each
+      // year, and cancelAllForBirthday can always find it.
       await scheduleYearlyReminder(
-        key: '$birthdayId-$days-$age',
+        key: '$birthdayId-$days',
         title: days == 0 ? 'Birthday Today 🎂' : 'Birthday Reminder 🎂',
         body: body,
         firstOccurrence: when,
@@ -241,7 +247,10 @@ class NotificationHelper {
     }
     for (final days in [0, 1, 3, 7]) {
       await _notifications.cancel('$birthdayId-$days'.hashCode);
-      for (var year = DateTime.now().year; year <= DateTime.now().year + 2; year++) {
+      // Legacy ids (older builds) included a birth-year suffix.
+      for (var year = DateTime.now().year - 2;
+          year <= DateTime.now().year + 2;
+          year++) {
         await _notifications.cancel('$birthdayId-$days-$year'.hashCode);
       }
     }

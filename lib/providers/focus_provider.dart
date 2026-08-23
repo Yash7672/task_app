@@ -11,6 +11,8 @@ import 'database_provider.dart';
 final focusServiceProvider = Provider<FocusService>((ref) => FocusService());
 
 class FocusState {
+  static const _clearActive = Object();
+
   final ActiveFocus? active;
   final List<FocusSession> history;
   final int minutesToday;
@@ -23,14 +25,17 @@ class FocusState {
     this.isLoading = true,
   });
 
-  FocusState copyWith({
-    ActiveFocus? active,
+  /// [active] uses a sentinel: pass `active: null` explicitly to end a
+  /// session, otherwise the current value is preserved (e.g. refreshHistory
+  /// during a running session must not clear it).
+  FocusState copyWithState({
+    Object? active = _clearActive,
     List<FocusSession>? history,
     int? minutesToday,
     bool? isLoading,
   }) {
     return FocusState(
-      active: active,
+      active: active == _clearActive ? this.active : active as ActiveFocus?,
       history: history ?? this.history,
       minutesToday: minutesToday ?? this.minutesToday,
       isLoading: isLoading ?? this.isLoading,
@@ -42,6 +47,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
   final DatabaseHelper _dbHelper;
   final FocusService _service;
   Timer? _ticker;
+  bool _starting = false;
 
   FocusNotifier(this._dbHelper, this._service) : super(const FocusState()) {
     _restore();
@@ -51,11 +57,11 @@ class FocusNotifier extends StateNotifier<FocusState> {
     try {
       final active = await _service.loadActiveSession();
       await refreshHistory();
-      state = state.copyWith(active: active, isLoading: false);
+      state = state.copyWithState(active: active, isLoading: false);
       if (active != null) _startTicker();
     } catch (e) {
       debugPrint('Focus restore failed: $e');
-      state = state.copyWith(isLoading: false);
+      state = state.copyWithState(isLoading: false);
     }
   }
 
@@ -66,7 +72,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
       final startOfDay = DateTime(now.year, now.month, now.day);
       final minutes =
           await _dbHelper.getTotalFocusMinutes(rangeStart: startOfDay);
-      state = state.copyWith(history: sessions, minutesToday: minutes);
+      state = state.copyWithState(history: sessions, minutesToday: minutes);
     } catch (e) {
       debugPrint('Focus history load failed: $e');
     }
@@ -89,7 +95,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
       return;
     }
 
-    state = state.copyWith(active: active);
+    state = state.copyWithState(active: active);
   }
 
   Future<void> startFocus({
@@ -97,14 +103,21 @@ class FocusNotifier extends StateNotifier<FocusState> {
     String? taskId,
     required int minutes,
   }) async {
-    if (state.active != null) return;
-    final session = await _service.startFocus(
-      label: label,
-      taskId: taskId,
-      minutes: minutes,
-    );
-    state = state.copyWith(active: session);
-    _startTicker();
+    if (state.active != null || _starting) return;
+    // Synchronous flag: the check-then-act below crosses awaits, so without
+    // it a rapid double-tap starts two sessions and clobbers the first.
+    _starting = true;
+    try {
+      final session = await _service.startFocus(
+        label: label,
+        taskId: taskId,
+        minutes: minutes,
+      );
+      state = state.copyWithState(active: session);
+      _startTicker();
+    } finally {
+      _starting = false;
+    }
   }
 
   Future<void> stopSession() async {
@@ -112,7 +125,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
     if (active == null) return;
     _ticker?.cancel();
     await _service.stopFocus(active, completed: false);
-    state = state.copyWith(active: null);
+    state = state.copyWithState(active: null);
     await refreshHistory();
   }
 
@@ -121,7 +134,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
     if (active == null) return;
     _ticker?.cancel();
     await _service.stopFocus(active, completed: true);
-    state = state.copyWith(active: null);
+    state = state.copyWithState(active: null);
     await refreshHistory();
   }
 

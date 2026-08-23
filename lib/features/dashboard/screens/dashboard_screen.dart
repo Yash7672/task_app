@@ -115,6 +115,7 @@ class DashboardScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'dashboard_fab',
         onPressed: () {
           Navigator.push(
               context,

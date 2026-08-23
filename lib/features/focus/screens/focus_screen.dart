@@ -132,9 +132,19 @@ class _SetupViewState extends ConsumerState<_SetupView> {
     final pendingTasks =
         todayTasks.where((t) => !t.isCompleted).toList();
 
-    if (_selectedTaskId != null &&
-        !pendingTasks.any((t) => t.id == _selectedTaskId)) {
-      _selectedTaskId = null;
+    // If the selected task disappeared (completed/archived elsewhere), clear
+    // the selection AND the prefilled label in a post-frame callback so the
+    // UI can never show a task that is about to be submitted as null.
+    final selectedStillExists =
+        pendingTasks.any((t) => t.id == _selectedTaskId);
+    if (!selectedStillExists && _selectedTaskId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _selectedTaskId = null;
+          _labelController.clear();
+        });
+      });
     }
     final selectedTask = pendingTasks
         .where((t) => t.id == _selectedTaskId)
@@ -205,6 +215,7 @@ class _SetupViewState extends ConsumerState<_SetupView> {
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    key: ValueKey(_selectedTaskId),
                     initialValue: _selectedTaskId,
                     decoration: const InputDecoration(
                         labelText: 'Pick a task (optional)',

@@ -57,6 +57,30 @@ class Habit {
     );
   }
 
+  /// Whole calendar days from [from] to [to] (positive when [to] is later).
+  /// Uses UTC date components so DST transitions can never skew the count.
+  static int calendarDaysBetween(DateTime from, DateTime to) {
+    final a = DateTime.utc(from.year, from.month, from.day);
+    final b = DateTime.utc(to.year, to.month, to.day);
+    return b.difference(a).inDays;
+  }
+
+  /// The calendar day before [date] — component math, immune to DST shifts
+  /// (subtracting an absolute 24h from midnight breaks after spring-forward).
+  static DateTime calendarDayBefore(DateTime date) {
+    return DateTime(date.year, date.month, date.day - 1);
+  }
+
+  /// Streak as it should be displayed right now: a stored counter goes stale
+  /// once days pass without completion, so it decays to zero when the last
+  /// completion is older than yesterday.
+  int effectiveCurrentStreak({DateTime? now}) {
+    if (lastCompletedDate == null || currentStreak <= 0) return 0;
+    final today = _startOfDay(now ?? DateTime.now());
+    final gap = calendarDaysBetween(_startOfDay(lastCompletedDate!), today);
+    return gap <= 1 ? currentStreak : 0;
+  }
+
   Habit markCompleted({required DateTime now}) {
     final today = _startOfDay(now);
     if (lastCompletedDate != null && _isSameDay(lastCompletedDate!, today)) {
@@ -68,12 +92,12 @@ class Habit {
 
     if (lastCompletedDate != null) {
       final previousDay = _startOfDay(lastCompletedDate!);
-      final yesterday = today.subtract(const Duration(days: 1));
+      final yesterday = calendarDayBefore(today);
 
       if (_isSameDay(previousDay, yesterday)) {
         nextCurrentStreak = currentStreak + 1;
         nextBestStreak = math.max(bestStreak, nextCurrentStreak);
-      } else if (previousDay.isBefore(yesterday)) {
+      } else if (calendarDaysBetween(previousDay, today) > 1) {
         nextCurrentStreak = 1;
       }
     }
@@ -92,8 +116,8 @@ class Habit {
       return 'Never';
     }
 
-    final completedDay = _startOfDay(lastCompletedDate!);
-    final differenceInDays = today.difference(completedDay).inDays;
+    final differenceInDays =
+        calendarDaysBetween(_startOfDay(lastCompletedDate!), today);
 
     if (differenceInDays <= 0) {
       return 'Today';

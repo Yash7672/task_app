@@ -12,9 +12,9 @@ class SettingsController extends StateNotifier<AppThemeMode> {
 
   Completer<void>? _loading;
 
-  Future<void> ensureLoaded() async {
+  Future<void> ensureLoaded() {
     if (_loading != null) return _loading!.future;
-    _load();
+    return _load();
   }
 
   Future<void> _load() async {

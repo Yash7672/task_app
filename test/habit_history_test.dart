@@ -36,11 +36,13 @@ void main() {
     await DatabaseHelper.instance.close();
   });
 
-  ProviderContainer createContainer() {
+  /// [autoDispose] can be disabled inside `testWidgets`, where addTearDown
+  /// runs after the framework's pending-timer check — dispose manually there.
+  ProviderContainer createContainer({bool autoDispose = true}) {
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(DatabaseHelper.instance),
     ]);
-    addTearDown(container.dispose);
+    if (autoDispose) addTearDown(container.dispose);
     return container;
   }
 
@@ -74,6 +76,34 @@ void main() {
     expect(restored.text, 'Morning workout');
     expect(restored.completed, isTrue);
     expect(restored.position, 2);
+  });
+
+  test('effectiveCurrentStreak decays once the last completion is stale', () {
+    final now = DateTime(2026, 8, 23);
+
+    Habit buildHabit({DateTime? lastCompleted}) => Habit(
+          name: 'Workout',
+          currentStreak: 12,
+          bestStreak: 20,
+          lastCompletedDate: lastCompleted,
+        );
+
+    // Completed today or yesterday -> stored streak still alive.
+    expect(
+      buildHabit(lastCompleted: DateTime(2026, 8, 23)).effectiveCurrentStreak(now: now),
+      12,
+    );
+    expect(
+      buildHabit(lastCompleted: DateTime(2026, 8, 22)).effectiveCurrentStreak(now: now),
+      12,
+    );
+    // Missed two or more days -> streak is gone even though the counter
+    // still says 12.
+    expect(
+      buildHabit(lastCompleted: DateTime(2026, 8, 21)).effectiveCurrentStreak(now: now),
+      0,
+    );
+    expect(buildHabit().effectiveCurrentStreak(now: now), 0);
   });
 
   test('a) completing a habit logs the day and advances streaks', () async {
@@ -343,7 +373,7 @@ void main() {
 
       await addLogItem(habit.id, now, 'Morning workout', position: 0);
       await addLogItem(habit.id, now, '30 push-ups', position: 1);
-      final container = createContainer();
+      final container = createContainer(autoDispose: false);
       await container.read(habitsProvider.notifier).completeToday(
             habit.id,
             now: now,
@@ -367,6 +397,11 @@ void main() {
 
       // Flush HomeWidgetService debounce timer so no timer stays pending.
       await tester.pump(const Duration(seconds: 1));
+
+      // Dispose before the test body ends: the midnight-reload Timer armed
+      // by HabitNotifier must be cancelled before the framework's invariant
+      // check, and addTearDown runs too late inside testWidgets.
+      container.dispose();
     });
 
     testWidgets('e) tapping an incomplete date shows the not-completed message',

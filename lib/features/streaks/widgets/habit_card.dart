@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/dialog_disposer.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
 import 'habit_complete_sheet.dart';
@@ -16,8 +17,8 @@ class HabitCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isCompletedToday = habit.isCompletedToday;
-    final streakEmoji = _getStreakEmoji(habit.currentStreak);
-    final streakColor = _getStreakColor(habit.currentStreak);
+    final streakEmoji = _getStreakEmoji(habit.effectiveCurrentStreak());
+    final streakColor = _getStreakColor(habit.effectiveCurrentStreak());
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -107,7 +108,11 @@ class HabitCard extends ConsumerWidget {
                           backgroundColor: isCompletedToday
                               ? Colors.grey.shade400
                               : Colors.green,
-                          foregroundColor: Colors.white,
+                          // Dark text on the light grey fill stays readable in
+                          // every theme; white on grey.shade400 is ~1.9:1.
+                          foregroundColor: isCompletedToday
+                              ? Colors.grey.shade800
+                              : Colors.white,
                           minimumSize: const Size.fromHeight(46),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
@@ -207,49 +212,52 @@ class HabitCard extends ConsumerWidget {
 
     final result = await showDialog<Habit>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Streak'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Streak Name',
-                prefixIcon: Icon(Icons.local_fire_department),
+      builder: (context) => DisposeOnExit(
+        controllers: [nameController, descriptionController],
+        child: AlertDialog(
+          title: const Text('Edit Streak'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Streak Name',
+                  prefixIcon: Icon(Icons.local_fire_department),
+                ),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  prefixIcon: Icon(Icons.description_outlined),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                prefixIcon: Icon(Icons.description_outlined),
-              ),
-              maxLines: 2,
+            FilledButton(
+              onPressed: () {
+                if (nameController.text.trim().isNotEmpty) {
+                  Navigator.pop(
+                    context,
+                    habit.copyWith(
+                      name: nameController.text.trim(),
+                      description: descriptionController.text.trim(),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Save'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (nameController.text.trim().isNotEmpty) {
-                Navigator.pop(
-                  context,
-                  habit.copyWith(
-                    name: nameController.text.trim(),
-                    description: descriptionController.text.trim(),
-                  ),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
 
