@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:gravity="center"
+    android:background="@drawable/pylo_widget_bg">
+
+    <TextView
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="PYLO"
+        android:textColor="@color/widget_header_color"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/widget_add_icon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="+"
+        android:textColor="#FFB74D"
+        android:textSize="36sp"
+        android:textStyle="bold"
+        android:paddingTop="16dp"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/widget_add_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Add Task"
+        android:textColor="@color/widget_task_color"
+        android:textSize="14sp"
+        android:paddingTop="8dp"
+        android:gravity="center" />
+
+</LinearLayout>

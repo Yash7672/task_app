@@ -631,7 +631,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
         0, (max, h) => h.effectiveCurrentStreak() > max
             ? h.effectiveCurrentStreak()
             : max);
-    HomeWidgetService.refreshHabits(best);
+    HomeWidgetService.refreshHabits(best, habits: habits);
   }
 
   Future<void> loadHabits() async {

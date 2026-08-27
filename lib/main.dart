@@ -14,6 +14,7 @@ import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/birthday_provider.dart';
 import 'providers/preferences_provider.dart';
 import 'providers/settings_provider.dart';
+import 'services/home_widget_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -66,7 +67,7 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
     if (!kIsWeb) {
       sw.reset();
 
-      // Notification init and birthday reschedule run concurrently.
+      // Notification init, birthday reschedule, and widget init run concurrently.
       final prefs = ref.read(settingsPreferencesProvider);
       await Future.wait([
         NotificationHelper.init().catchError((e) {
@@ -76,6 +77,9 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
           ref.read(birthdayProvider.notifier).rescheduleAllReminders().catchError((e) {
             if (kDebugMode) debugPrint('Birthday reschedule failed: $e');
           }),
+        HomeWidgetService.init().catchError((e) {
+          if (kDebugMode) debugPrint('HomeWidget init failed: $e');
+        }),
       ]);
 
       StartupBenchmark

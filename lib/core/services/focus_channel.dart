@@ -41,4 +41,20 @@ class FocusChannel {
       return false;
     }
   }
+
+  /// Enable or disable lock screen flags (show over lock screen, turn screen on).
+  /// Used during strict focus to ensure the focus screen is always visible.
+  static Future<bool> setLockScreenFlags(bool enabled) async {
+    if (!_isAndroid) return false;
+    try {
+      final result = await _channel.invokeMethod<bool>(
+        'setLockScreenFlags',
+        {'enabled': enabled},
+      );
+      return result ?? false;
+    } catch (e) {
+      debugPrint('FocusChannel.setLockScreenFlags failed: $e');
+      return false;
+    }
+  }
 }

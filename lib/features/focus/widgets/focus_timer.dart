@@ -1,28 +1,56 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/focus_session_model.dart';
+import '../../../providers/focus_provider.dart';
 import '../../../services/focus/focus_service.dart';
 
-class FocusTimer extends StatefulWidget {
+class FocusTimer extends ConsumerWidget {
+  final double size;
+
+  const FocusTimer({super.key, this.size = 240});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final focus = ref.watch(focusProvider);
+    final session = focus.active;
+
+    if (session == null) {
+      return SizedBox(width: size, height: size);
+    }
+
+    return _FocusTimerDisplay(session: session, size: size);
+  }
+}
+
+class _FocusTimerDisplay extends StatefulWidget {
   final ActiveFocus session;
   final double size;
 
-  const FocusTimer({super.key, required this.session, this.size = 240});
+  const _FocusTimerDisplay({required this.session, required this.size});
 
   @override
-  State<FocusTimer> createState() => _FocusTimerState();
+  State<_FocusTimerDisplay> createState() => _FocusTimerDisplayState();
 }
 
-class _FocusTimerState extends State<FocusTimer> {
+class _FocusTimerDisplayState extends State<_FocusTimerDisplay> {
   Timer? _ticker;
+  int _lastSecond = 0;
 
   @override
   void initState() {
     super.initState();
+    _lastSecond = widget.session.remaining.inSeconds;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        final currentSecond = widget.session.remaining.inSeconds;
+        if (currentSecond != _lastSecond) {
+          _lastSecond = currentSecond;
+          setState(() {});
+        }
+      }
     });
   }
 

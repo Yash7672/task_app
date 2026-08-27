@@ -2,4 +2,7 @@
 <resources>
     <string name="app_name">PYLO</string>
     <string name="pylo_widget_description">Shows today\'s tasks and your streak</string>
+    <string name="pylo_habits_widget_description">Shows your habit streaks and progress</string>
+    <string name="pylo_progress_widget_description">Shows today\'s task completion progress</string>
+    <string name="pylo_quick_add_widget_description">Quickly add a new task</string>
 </resources>

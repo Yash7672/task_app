@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget colors (light mode defaults - dark theme since PYLO is dark-themed) -->
+    <color name="widget_header_color">#EAE6F2</color>
+    <color name="widget_task_color">#C9C4D6</color>
+    <color name="widget_empty_color">#7A758A</color>
+    <color name="widget_bg_color">#E6201B2A</color>
+    <color name="widget_accent_color">#FFB74D</color>
+</resources>

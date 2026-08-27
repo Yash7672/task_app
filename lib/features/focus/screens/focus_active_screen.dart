@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,19 +16,45 @@ class FocusActiveScreen extends ConsumerStatefulWidget {
   ConsumerState<FocusActiveScreen> createState() => _FocusActiveScreenState();
 }
 
-class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen> {
+class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
+    with WidgetsBindingObserver {
   bool _navigatedBack = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    // Prevent screenshots/screen recording in strict mode.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _enforceStrictMode();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _enforceStrictMode();
+    }
+  }
+
+  void _enforceStrictMode() {
+    final focus = ref.read(focusProvider);
+    final active = focus.active;
+    if (active == null) return;
+
+    if (active.mode == FocusMode.strict) {
+      // Re-enter immersive mode and ensure we're the top screen.
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
   }
 
   void _navigateBack() {
@@ -41,10 +69,11 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen> {
 
     final isStrict = focus.active?.mode == FocusMode.strict;
     if (isStrict) {
+      // Strict mode: absolutely no back navigation.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Focus is active. Use End Focus to stop.'),
+            content: Text('Focus is locked. Use End Focus with PIN to stop.'),
             duration: Duration(seconds: 2),
           ),
         );
@@ -85,37 +114,38 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen> {
 
     final isStrict = active.mode == FocusMode.strict;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('End Focus?'),
-        content:
-            const Text('Are you sure you want to end this focus session early?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('End Focus'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
     if (isStrict) {
-      final pinValid = await FocusPinDialog.show(context);
+      // Strict mode: go directly to PIN entry. No confirmation dialog.
+      final pinValid = await FocusPinDialog.show(context, strict: true);
       if (pinValid != true || !mounted) return;
       await ref.read(focusProvider.notifier).stopSession();
+      _navigateBack();
     } else {
-      await ref.read(focusProvider.notifier).stopSession();
-    }
+      // Normal mode: confirmation dialog first.
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('End Focus?'),
+          content: const Text(
+              'Are you sure you want to end this focus session early?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('End Focus'),
+            ),
+          ],
+        ),
+      );
 
-    _navigateBack();
+      if (confirmed != true || !mounted) return;
+      await ref.read(focusProvider.notifier).stopSession();
+      _navigateBack();
+    }
   }
 
   @override
@@ -170,7 +200,7 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  FocusTimer(session: active),
+                  const FocusTimer(),
                   const SizedBox(height: 32),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -188,34 +218,57 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Stay focused.',
+                    isStrict
+                        ? 'PYLO is locked in Focus Mode.'
+                        : 'Stay focused.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 48),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _endFocus,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: theme.colorScheme.error,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      icon: const Icon(Icons.stop_rounded),
-                      label: const Text(
-                        'END FOCUS',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                  if (isStrict) ...[
+                    // Strict mode: simple "End Focus" that opens PIN dialog.
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _endFocus,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          side: BorderSide(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                        icon: const Icon(Icons.lock_outline_rounded, size: 20),
+                        label: const Text(
+                          'End Focus',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ),
-                  ),
-                  if (isStrict) ...[
                     const SizedBox(height: 12),
                     Text(
-                      'PIN required to end early',
+                      'Enter PYLO PIN to end early',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ] else ...[
+                    // Normal mode: red "END FOCUS" button with confirmation.
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _endFocus,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.error,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        icon: const Icon(Icons.stop_rounded),
+                        label: const Text(
+                          'END FOCUS',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],

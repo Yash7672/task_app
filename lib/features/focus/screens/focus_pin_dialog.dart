@@ -5,14 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/focus_provider.dart';
 
 class FocusPinDialog extends ConsumerStatefulWidget {
-  const FocusPinDialog({super.key});
+  final bool strict;
 
-  static Future<bool> show(BuildContext context) async {
+  const FocusPinDialog({super.key, this.strict = false});
+
+  /// Shows the PIN dialog for focus exit.
+  /// When [strict] is true, the dialog is non-dismissible and has no cancel button.
+  static Future<bool> show(BuildContext context, {bool strict = false}) async {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => const FocusPinDialog(),
+      isDismissible: !strict,
+      enableDrag: !strict,
+      builder: (_) => FocusPinDialog(strict: strict),
     );
     return result ?? false;
   }
@@ -65,120 +71,161 @@ class _FocusPinDialogState extends ConsumerState<FocusPinDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Icon(
-              Icons.lock_outline_rounded,
-              size: 36,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Enter PYLO PIN to end focus',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            if (_errorText != null) ...[
+    return PopScope(
+      canPop: !widget.strict,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && widget.strict) {
+          // Strict mode: cannot dismiss by tapping outside or swiping down.
+        }
+      },
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               const SizedBox(height: 8),
-              Text(
-                _errorText!,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ],
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(4, (index) {
-                final filled = index < _buffer.length;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  margin: const EdgeInsets.symmetric(horizontal: 10),
-                  width: filled ? 18 : 14,
-                  height: filled ? 18 : 14,
+              if (!widget.strict) ...[
+                Container(
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: filled
-                        ? (_errorText != null
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.primary)
-                        : Colors.transparent,
-                    border: Border.all(
+                    color: theme.colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ] else ...[
+                const SizedBox(height: 12),
+              ],
+              Icon(
+                Icons.lock_outline_rounded,
+                size: 36,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                widget.strict
+                    ? 'Enter PYLO PIN to end focus'
+                    : 'Enter PYLO PIN to end focus',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              if (widget.strict) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'No way out without the correct PIN.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (_errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _errorText!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(4, (index) {
+                  final filled = index < _buffer.length;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    margin: const EdgeInsets.symmetric(horizontal: 10),
+                    width: filled ? 18 : 14,
+                    height: filled ? 18 : 14,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color: filled
                           ? (_errorText != null
                               ? theme.colorScheme.error
                               : theme.colorScheme.primary)
-                          : theme.colorScheme.outline,
-                      width: 2,
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: filled
+                            ? (_errorText != null
+                                ? theme.colorScheme.error
+                                : theme.colorScheme.primary)
+                            : theme.colorScheme.outline,
+                        width: 2,
+                      ),
                     ),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: 264,
-              child: Column(
-                children: [
-                  for (final row in [
-                    ['1', '2', '3'],
-                    ['4', '5', '6'],
-                    ['7', '8', '9'],
-                  ])
+                  );
+                }),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: 264,
+                child: Column(
+                  children: [
+                    for (final row in [
+                      ['1', '2', '3'],
+                      ['4', '5', '6'],
+                      ['7', '8', '9'],
+                    ])
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: row
+                            .map((d) => _PinButton(
+                                label: d,
+                                onTap: () => _onDigit(d),
+                                enabled: !_verifying))
+                            .toList(),
+                      ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: row
-                          .map((d) => _PinButton(
-                              label: d,
-                              onTap: () => _onDigit(d),
-                              enabled: !_verifying))
-                          .toList(),
+                      children: [
+                        if (widget.strict)
+                          const Padding(
+                            padding: EdgeInsets.all(5),
+                            child: SizedBox(width: 78, height: 60),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.all(5),
+                            child: SizedBox(
+                              width: 78,
+                              height: 60,
+                              child: Center(
+                                child: TextButton(
+                                  onPressed: _verifying
+                                      ? null
+                                      : () => Navigator.of(context).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                            ),
+                          ),
+                        _PinButton(
+                            label: '0',
+                            onTap: () => _onDigit('0'),
+                            enabled: !_verifying),
+                        _PinButton(
+                          icon: Icons.backspace_outlined,
+                          onTap: _onBackspace,
+                          enabled: !_verifying,
+                        ),
+                      ],
                     ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.all(5),
-                        child: SizedBox(width: 78, height: 60),
-                      ),
-                      _PinButton(
-                          label: '0',
-                          onTap: () => _onDigit('0'),
-                          enabled: !_verifying),
-                      _PinButton(
-                        icon: Icons.backspace_outlined,
-                        onTap: _onBackspace,
-                        enabled: !_verifying,
-                      ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: _verifying
-                  ? null
-                  : () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 16),
+              if (!widget.strict)
+                TextButton(
+                  onPressed: _verifying
+                      ? null
+                      : () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );

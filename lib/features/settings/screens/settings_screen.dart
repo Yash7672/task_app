@@ -253,12 +253,51 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('Add home screen widget'),
+                  title: const Text('Add "Today\'s Tasks" widget'),
                   subtitle:
-                      const Text('Pin the PYLO widget to your home screen'),
+                      const Text('Shows today\'s tasks with progress'),
                   leading: const Icon(Icons.widgets_outlined),
                   onTap: () async {
                     await HomeWidgetService.requestPinWidget();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'If nothing appeared, add it from your launcher\'s widget menu.')));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Add "Habits" widget'),
+                  subtitle:
+                      const Text('Shows habit streaks and progress'),
+                  leading: const Icon(Icons.local_fire_department_outlined),
+                  onTap: () async {
+                    await HomeWidgetService.requestPinHabitsWidget();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'If nothing appeared, add it from your launcher\'s widget menu.')));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Add "Progress" widget'),
+                  subtitle:
+                      const Text('Shows today\'s completion progress'),
+                  leading: const Icon(Icons.pie_chart_outline),
+                  onTap: () async {
+                    await HomeWidgetService.requestPinProgressWidget();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'If nothing appeared, add it from your launcher\'s widget menu.')));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Add "Quick Add" widget'),
+                  subtitle:
+                      const Text('Tap to quickly add a new task'),
+                  leading: const Icon(Icons.add_circle_outline),
+                  onTap: () async {
+                    await HomeWidgetService.requestPinQuickAddWidget();
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                         content: Text(

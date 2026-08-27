@@ -281,6 +281,7 @@ class NotificationHelper {
   static Future<void> showFocusOngoing({
     required String label,
     required DateTime endTime,
+    required bool isStrict,
   }) async {
     if (kIsWeb) return;
     final remaining = endTime.difference(DateTime.now());
@@ -288,7 +289,7 @@ class NotificationHelper {
     try {
       await _notifications.show(
         FocusNotificationIds.ongoing,
-        '🎯 Focus Mode',
+        isStrict ? '🔒 Strict Focus' : '🎯 Focus Mode',
         mins > 0 ? '$label • $mins min remaining' : '$label • finishing…',
         _details(_focusDetails),
       );

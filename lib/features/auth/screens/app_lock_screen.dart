@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../models/focus_session_model.dart';
 import '../../../navigation/app_navigation.dart';
 import '../../../providers/focus_provider.dart';
 import '../../../providers/security_provider.dart';
 import '../../../services/security/biometric_service.dart';
+import '../../../services/widget_action_handler.dart';
 import '../../focus/screens/focus_active_screen.dart';
 import '../widgets/pin_pad.dart';
 
@@ -22,6 +24,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   String? _errorText;
   bool _authenticating = false;
   IconData _biometricIcon = Icons.fingerprint;
+  bool _widgetActionHandled = false;
 
   /// Drives the visible lockout countdown while it is active.
   Timer? _lockoutTicker;
@@ -163,11 +166,28 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     }
 
     final focus = ref.watch(focusProvider);
-    final hasActiveFocus = focus.active != null;
+    final activeFocus = focus.active;
+
+    // STRICT FOCUS: absolute priority. Skip app lock entirely.
+    // The user is already "locked" in focus mode with its own PIN system.
+    if (activeFocus != null && activeFocus.mode == FocusMode.strict) {
+      return const FocusActiveScreen();
+    }
+
+    // NORMAL FOCUS: also show focus screen (can be exited with confirmation).
+    if (activeFocus != null) {
+      return const FocusActiveScreen();
+    }
 
     if (!security.requiresAuth) {
-      if (hasActiveFocus) {
-        return const FocusActiveScreen();
+      // Handle widget deep link action once when app becomes ready
+      if (!_widgetActionHandled) {
+        _widgetActionHandled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            WidgetActionHandler.handlePendingAction(context);
+          }
+        });
       }
       return const AppNavigation();
     }

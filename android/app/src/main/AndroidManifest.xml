@@ -38,6 +38,14 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Widget deep link intent filters -->
+            <intent-filter>
+                <action android:name="WIDGET_OPEN_TASK"/>
+                <action android:name="WIDGET_OPEN_HABITS"/>
+                <action android:name="WIDGET_OPEN_DASHBOARD"/>
+                <action android:name="WIDGET_ADD_TASK"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -55,6 +63,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- Widget: Today Tasks -->
         <receiver
             android:name=".PyloHomeWidgetProvider"
             android:exported="false">
@@ -64,6 +73,52 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/pylo_home_widget_info"/>
+        </receiver>
+
+        <!-- Widget: Habits -->
+        <receiver
+            android:name=".PyloHabitsWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pylo_habits_widget_info"/>
+        </receiver>
+
+        <!-- Widget: Progress -->
+        <receiver
+            android:name=".PyloProgressWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pylo_progress_widget_info"/>
+        </receiver>
+
+        <!-- Widget: Quick Add -->
+        <receiver
+            android:name=".PyloQuickAddWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pylo_quick_add_widget_info"/>
+        </receiver>
+
+        <!-- Boot completed receiver for widget refresh -->
+        <receiver
+            android:name=".WidgetBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
         </receiver>
 
         <provider

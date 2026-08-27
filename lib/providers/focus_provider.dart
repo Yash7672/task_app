@@ -30,6 +30,10 @@ class FocusState {
     this.isPaused = false,
   });
 
+  /// Whether the currently active focus session is in strict mode.
+  bool get isStrictActive =>
+      active != null && active!.mode == FocusMode.strict;
+
   FocusState copyWithState({
     Object? active = _clearActive,
     List<FocusSession>? history,

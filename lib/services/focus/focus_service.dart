@@ -77,6 +77,12 @@ class FocusService {
       return null;
     }
 
+    // If restoring a strict session, re-enter lock task and set lock screen flags.
+    if (session.mode == FocusMode.strict) {
+      await FocusChannel.enterLockTask();
+      await FocusChannel.setLockScreenFlags(true);
+    }
+
     return session;
   }
 
@@ -109,12 +115,15 @@ class FocusService {
     await prefs.setString(_keyMode, mode.name);
 
     if (mode == FocusMode.strict) {
+      // Enter Android Lock Task mode and set lock screen flags.
       await FocusChannel.enterLockTask();
+      await FocusChannel.setLockScreenFlags(true);
     }
 
     await NotificationHelper.showFocusOngoing(
       label: label,
       endTime: session.endTime,
+      isStrict: mode == FocusMode.strict,
     );
     await NotificationHelper.scheduleFocusComplete(
       label: label,
@@ -126,7 +135,9 @@ class FocusService {
 
   Future<void> stopFocus(ActiveFocus session, {bool completed = false}) async {
     if (session.mode == FocusMode.strict) {
+      // Exit Android Lock Task mode and clear lock screen flags.
       await FocusChannel.exitLockTask();
+      await FocusChannel.setLockScreenFlags(false);
     }
     await _finalize(session, completed: completed);
   }
