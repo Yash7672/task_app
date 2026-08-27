@@ -7,15 +7,7 @@ import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/more/screens/more_screen.dart';
 import '../features/streaks/screens/streaks_screen.dart';
 import '../features/tasks/screens/task_list_screen.dart';
-
-final _screenProviders = Provider<List<Widget>>((ref) => const [
-      DashboardScreen(),
-      TaskListScreen(),
-      CalendarScreen(),
-      StreaksScreen(),
-      ChecklistScreen(),
-      MoreScreen(),
-    ]);
+import '../providers/focus_provider.dart';
 
 class AppNavigation extends ConsumerStatefulWidget {
   const AppNavigation({super.key});
@@ -27,13 +19,31 @@ class AppNavigation extends ConsumerStatefulWidget {
 class _AppNavigationState extends ConsumerState<AppNavigation> {
   int _currentIndex = 0;
 
+  /// IndexedStack keeps all visited screens alive so switching tabs doesn't
+  /// rebuild screens from scratch — preserving scroll position, loaded data,
+  /// and avoiding duplicate provider watches.
+  late final List<Widget> _screens = [
+    const DashboardScreen(),
+    const TaskListScreen(),
+    const CalendarScreen(),
+    const StreaksScreen(),
+    const ChecklistScreen(),
+    const MoreScreen(),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final pages = ref.watch(_screenProviders);
+    final focus = ref.watch(focusProvider);
+    final hasActiveFocus = focus.active != null;
+
+    if (hasActiveFocus) {
+      return const SizedBox.shrink();
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: pages,
+        children: _screens,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

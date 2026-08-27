@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../navigation/app_navigation.dart';
+import '../../../providers/focus_provider.dart';
 import '../../../providers/security_provider.dart';
 import '../../../services/security/biometric_service.dart';
+import '../../focus/screens/focus_active_screen.dart';
 import '../widgets/pin_pad.dart';
 
 class AppLockGate extends ConsumerStatefulWidget {
@@ -25,6 +27,8 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   Timer? _lockoutTicker;
   int _lockoutSecondsLeft = 0;
 
+  static const int _maxPinAttempts = SecurityNotifier.maxPinAttempts;
+
   @override
   void initState() {
     super.initState();
@@ -32,6 +36,18 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadBiometricIcon();
       _syncLockout();
+    });
+    _setupListener();
+  }
+
+  void _setupListener() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.listenManual<SecurityState>(securityProvider, (previous, next) {
+        if ((previous?.isLoading ?? true) && !next.isLoading) {
+          _loadBiometricIcon();
+        }
+      });
     });
   }
 
@@ -121,8 +137,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
           'Too many attempts. Try again in $_lockoutSecondsLeft s.');
       _syncLockout();
     } else {
-      final left =
-          SecurityNotifier.maxPinAttempts - notifier.pinFailedAttempts;
+      final left = _maxPinAttempts - notifier.pinFailedAttempts;
       setState(() => _errorText = 'Incorrect PIN'
           '${left > 0 && left <= 2 ? ' — $left attempt${left == 1 ? '' : 's'} left' : ''}');
     }
@@ -131,13 +146,6 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   @override
   Widget build(BuildContext context) {
     final security = ref.watch(securityProvider);
-
-    // When async security load completes, update the biometric icon.
-    ref.listen<SecurityState>(securityProvider, (previous, next) {
-      if ((previous?.isLoading ?? true) && !next.isLoading) {
-        _loadBiometricIcon();
-      }
-    });
 
     if (security.isLoading) {
       return const Scaffold(
@@ -154,7 +162,13 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       );
     }
 
+    final focus = ref.watch(focusProvider);
+    final hasActiveFocus = focus.active != null;
+
     if (!security.requiresAuth) {
+      if (hasActiveFocus) {
+        return const FocusActiveScreen();
+      }
       return const AppNavigation();
     }
 

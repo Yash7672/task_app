@@ -142,8 +142,6 @@ class SettingsScreen extends ConsumerWidget {
                     }
                   },
                 ),
-                if (prefs.birthdayRemindersEnabled)
-                  _BirthdayRemindersList(),
                 ListTile(
                   title: const Text('Default reminders'),
                   subtitle: Text(
@@ -798,95 +796,6 @@ class _FaceIdTileState extends ConsumerState<_FaceIdTile> {
               : 'No face recognition enrolled on this device'),
       value: security.faceIdEnabled && security.faceIdAvailable,
       onChanged: (!_verifying && security.faceIdAvailable) ? _onToggle : null,
-    );
-  }
-}
-
-/// Shows a compact list of all birthdays with their reminder configuration
-/// directly in the Notifications section, so users can see at a glance which
-/// birthdays have upcoming reminders.
-class _BirthdayRemindersList extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final birthdays = ref.watch(birthdayProvider);
-    final theme = Theme.of(context);
-
-    return birthdays.when(
-      data: (list) {
-        if (list.isEmpty) return const SizedBox.shrink();
-
-        final upcoming = list.where((b) => b.daysUntilNext() <= 60).toList();
-        if (upcoming.isEmpty) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Upcoming birthday reminders',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 6),
-              ...upcoming.take(5).map((b) {
-                final days = b.daysUntilNext();
-                final reminderLabels = b.reminderDaysBefore.map((d) {
-                  if (d == 0) return 'on day';
-                  return '${d}d before';
-                }).join(', ');
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cake_rounded,
-                          size: 16, color: Colors.pink),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          b.name,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        days == 0 ? 'Today!' : 'in $days days',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: days <= 3 ? Colors.pink : Colors.grey[600],
-                          fontWeight:
-                              days <= 3 ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '($reminderLabels)',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[500],
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-              if (list.length > 5)
-                Text(
-                  '+${list.length - 5} more',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[500],
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

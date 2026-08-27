@@ -17,6 +17,21 @@ class RestoreResult {
 }
 
 class RestoreService {
+  /// Maximum backup file size (10 MB) to prevent OOM on malicious files.
+  static const int _maxBackupSizeBytes = 10 * 1024 * 1024;
+
+  /// SharedPreferences keys that must NOT be restored from untrusted backups
+  /// because they control app security settings.
+  static const Set<String> _securityKeys = {
+    'app_lock_enabled',
+    'pin_hash',
+    'pin_salt',
+    'biometric_enabled',
+    'lock_timeout',
+    'pin_failed_attempts',
+    'pin_lockout_until_ms',
+  };
+
   static Future<Map<String, dynamic>?> pickAndParse() async {
     if (kIsWeb) return null;
 
@@ -27,6 +42,16 @@ class RestoreService {
     );
 
     if (file == null) return null;
+
+    // Enforce size limit to prevent OOM.
+    final filePath = file.path;
+    if (filePath != null) {
+      final fileEntity = File(filePath);
+      final fileSize = await fileEntity.length();
+      if (fileSize > _maxBackupSizeBytes) {
+        throw Exception('Backup file is too large (${fileSize ~/ 1024} KB). Maximum is ${_maxBackupSizeBytes ~/ 1024} KB.');
+      }
+    }
 
     String content;
     try {
@@ -78,6 +103,8 @@ class RestoreService {
     if (prefsData is Map<String, dynamic>) {
       final prefs = await SharedPreferences.getInstance();
       for (final entry in prefsData.entries) {
+        // Skip security-sensitive keys from untrusted backups.
+        if (_securityKeys.contains(entry.key)) continue;
         final value = entry.value;
         if (value is bool) {
           await prefs.setBool(entry.key, value);

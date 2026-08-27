@@ -18,6 +18,7 @@ class TaskListItem extends ConsumerWidget {
     final theme = Theme.of(context);
     final priorityColor = AppColors.getPriorityColor(task.priority);
     final categoryColor = AppColors.getCategoryColor(task.category);
+    final messenger = ScaffoldMessenger.of(context);
 
     return Dismissible(
       key: Key(task.id),
@@ -31,7 +32,7 @@ class TaskListItem extends ConsumerWidget {
       onDismissed: (_) {
         NotificationHelper.cancelAllForTask(task.id);
         ref.read(taskProvider.notifier).deleteTask(task.id);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: const Text('Task moved to trash'),
             action: SnackBarAction(

@@ -7,6 +7,7 @@ import '../../../providers/focus_provider.dart';
 import '../../../providers/task_provider.dart';
 import '../../focus/screens/focus_screen.dart';
 import '../../profile/screens/profile_screen.dart';
+import '../../settings/screens/settings_screen.dart';
 import '../../tasks/screens/add_edit_task_screen.dart';
 import '../../tasks/screens/task_list_screen.dart';
 import '../widgets/task_list_item.dart';
@@ -45,6 +46,13 @@ class DashboardScreen extends StatelessWidget {
             onPressed: () {
               Navigator.push(context,
                   MaterialPageRoute(builder: (_) => const ProfileScreen()));
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()));
             },
           ),
         ],

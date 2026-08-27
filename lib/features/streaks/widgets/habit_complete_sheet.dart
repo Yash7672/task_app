@@ -67,7 +67,6 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
         await ref.read(habitsProvider.notifier).completeToday(widget.habit.id);
     if (!mounted) return;
     setState(() => _isCompleting = false);
-    Navigator.pop(context);
     if (updated != null) {
       messenger.showSnackBar(
         SnackBar(
@@ -75,6 +74,9 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
           backgroundColor: Colors.green,
         ),
       );
+    }
+    if (mounted) {
+      Navigator.pop(context);
     }
   }
 

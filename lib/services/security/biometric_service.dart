@@ -2,15 +2,19 @@ import 'package:local_auth/local_auth.dart';
 import 'package:flutter/foundation.dart';
 
 class BiometricService {
-  static final LocalAuthentication _auth = LocalAuthentication();
+  static LocalAuthentication? _auth;
+
+  static LocalAuthentication get _authInstance {
+    return _auth ??= LocalAuthentication();
+  }
 
   static Future<bool> isAvailable() async {
     if (kIsWeb) return false;
     try {
-      final canCheck = await _auth.canCheckBiometrics;
-      final isDeviceSupported = await _auth.isDeviceSupported();
+      final canCheck = await _authInstance.canCheckBiometrics;
+      final isDeviceSupported = await _authInstance.isDeviceSupported();
       if (!canCheck || !isDeviceSupported) return false;
-      final enrolled = await _auth.getAvailableBiometrics();
+      final enrolled = await _authInstance.getAvailableBiometrics();
       debugPrint('PYLO biometrics reported by device: '
           '${enrolled.map((b) => b.name).toList()}');
       return enrolled.isNotEmpty;
@@ -23,7 +27,7 @@ class BiometricService {
   static Future<bool> hasEnrolledBiometrics() async {
     if (kIsWeb) return false;
     try {
-      return await _auth.getAvailableBiometrics().then((list) => list.isNotEmpty);
+      return await _authInstance.getAvailableBiometrics().then((list) => list.isNotEmpty);
     } catch (e) {
       debugPrint('Enrolled biometrics check failed: $e');
       return false;
@@ -35,7 +39,7 @@ class BiometricService {
   static Future<bool> hasFace() async {
     if (kIsWeb) return false;
     try {
-      final list = await _auth.getAvailableBiometrics();
+      final list = await _authInstance.getAvailableBiometrics();
       return list.contains(BiometricType.face);
     } catch (e) {
       debugPrint('Face biometric check failed: $e');
@@ -48,7 +52,7 @@ class BiometricService {
   static Future<bool> prefersFace() async {
     if (kIsWeb) return false;
     try {
-      final list = await _auth.getAvailableBiometrics();
+      final list = await _authInstance.getAvailableBiometrics();
       final hasFace = list.contains(BiometricType.face);
       final hasFingerprint = list.contains(BiometricType.fingerprint);
       return hasFace && !hasFingerprint;
@@ -61,7 +65,7 @@ class BiometricService {
   static Future<bool> authenticate({required String reason}) async {
     if (kIsWeb) return false;
     try {
-      return await _auth.authenticate(
+      return await _authInstance.authenticate(
         localizedReason: reason,
         biometricOnly: true,
         persistAcrossBackgrounding: true,

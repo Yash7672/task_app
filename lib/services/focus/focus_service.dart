@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/focus_channel.dart';
 import '../../core/utils/notification_helper.dart';
 import '../../database/database_helper.dart';
 import '../../models/focus_session_model.dart';
@@ -11,6 +12,7 @@ class ActiveFocus {
   final DateTime startTime;
   final DateTime endTime;
   final int plannedMinutes;
+  final FocusMode mode;
 
   const ActiveFocus({
     required this.label,
@@ -18,10 +20,10 @@ class ActiveFocus {
     required this.startTime,
     required this.endTime,
     required this.plannedMinutes,
+    this.mode = FocusMode.normal,
   });
 
-  Duration get remaining =>
-      endTime.difference(DateTime.now());
+  Duration get remaining => endTime.difference(DateTime.now());
 
   bool get isExpired => remaining.isNegative;
 
@@ -39,6 +41,18 @@ class FocusService {
   static const _keyStartMs = 'focus_start_ms';
   static const _keyEndMs = 'focus_end_ms';
   static const _keyMinutes = 'focus_planned_minutes';
+  static const _keyMode = 'focus_mode';
+  static const _keyStrictPref = 'focus_strict_mode_pref';
+
+  Future<bool> isStrictMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyStrictPref) ?? false;
+  }
+
+  Future<void> setStrictMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyStrictPref, value);
+  }
 
   Future<ActiveFocus?> loadActiveSession() async {
     final prefs = await SharedPreferences.getInstance();
@@ -55,6 +69,7 @@ class FocusService {
       startTime: DateTime.fromMillisecondsSinceEpoch(startMs),
       endTime: DateTime.fromMillisecondsSinceEpoch(endMs),
       plannedMinutes: minutes,
+      mode: FocusMode.fromName(prefs.getString(_keyMode)),
     );
 
     if (session.isExpired) {
@@ -69,6 +84,7 @@ class FocusService {
     required String label,
     String? taskId,
     required int minutes,
+    required FocusMode mode,
   }) async {
     final now = DateTime.now();
     final session = ActiveFocus(
@@ -77,6 +93,7 @@ class FocusService {
       startTime: now,
       endTime: now.add(Duration(minutes: minutes)),
       plannedMinutes: minutes,
+      mode: mode,
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -89,6 +106,11 @@ class FocusService {
     await prefs.setInt(_keyStartMs, session.startTime.millisecondsSinceEpoch);
     await prefs.setInt(_keyEndMs, session.endTime.millisecondsSinceEpoch);
     await prefs.setInt(_keyMinutes, minutes);
+    await prefs.setString(_keyMode, mode.name);
+
+    if (mode == FocusMode.strict) {
+      await FocusChannel.enterLockTask();
+    }
 
     await NotificationHelper.showFocusOngoing(
       label: label,
@@ -103,22 +125,15 @@ class FocusService {
   }
 
   Future<void> stopFocus(ActiveFocus session, {bool completed = false}) async {
+    if (session.mode == FocusMode.strict) {
+      await FocusChannel.exitLockTask();
+    }
     await _finalize(session, completed: completed);
   }
 
   Future<void> _finalize(ActiveFocus session,
       {required bool completed}) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyLabel);
-    await prefs.remove(_keyTaskId);
-    await prefs.remove(_keyStartMs);
-    await prefs.remove(_keyEndMs);
-    await prefs.remove(_keyMinutes);
-
     try {
-      // Record the ACTUAL end: finishing or abandoning a session early must
-      // not credit the full planned duration to stats. Sessions that ran past
-      // their planned end (e.g. restored after a force-kill) cap at the plan.
       final now = DateTime.now();
       final effectiveEnd =
           now.isBefore(session.endTime) ? now : session.endTime;
@@ -130,8 +145,17 @@ class FocusService {
           endTime: effectiveEnd,
           plannedMinutes: session.plannedMinutes,
           completed: completed,
+          mode: session.mode,
         ),
       );
+      // Only clear prefs after successful DB write to prevent data loss.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyLabel);
+      await prefs.remove(_keyTaskId);
+      await prefs.remove(_keyStartMs);
+      await prefs.remove(_keyEndMs);
+      await prefs.remove(_keyMinutes);
+      await prefs.remove(_keyMode);
     } catch (e) {
       debugPrint('Failed to save focus session: $e');
     }

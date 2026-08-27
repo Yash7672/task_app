@@ -59,6 +59,21 @@ android {
     lint {
         checkReleaseBuilds = false
     }
+
+    packaging {
+        jniLibs {
+            pickFirsts += setOf(
+                "arm64-v8a/libapp.so",
+                "armeabi-v7a/libapp.so",
+                "x86_64/libapp.so",
+                "x86/libapp.so",
+                "arm64-v8a/libsqlite3.so",
+                "armeabi-v7a/libsqlite3.so",
+                "x86_64/libsqlite3.so",
+                "x86/libsqlite3.so"
+            )
+        }
+    }
 }
 
 kotlin {

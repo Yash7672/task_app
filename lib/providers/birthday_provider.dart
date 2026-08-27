@@ -76,6 +76,8 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
             name: birthday.name,
             nextBirthday: birthday.nextOccurrence(),
             reminderDaysBefore: birthday.reminderDaysBefore,
+            reminderHour: birthday.reminderHour,
+            reminderMinute: birthday.reminderMinute,
           );
         }
       } catch (e) {
@@ -105,6 +107,8 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
           name: birthday.name,
           nextBirthday: birthday.nextOccurrence(),
           reminderDaysBefore: birthday.reminderDaysBefore,
+          reminderHour: birthday.reminderHour,
+          reminderMinute: birthday.reminderMinute,
         );
       }
     } catch (e) {
@@ -133,6 +137,8 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
           name: birthday.name,
           nextBirthday: birthday.nextOccurrence(),
           reminderDaysBefore: birthday.reminderDaysBefore,
+          reminderHour: birthday.reminderHour,
+          reminderMinute: birthday.reminderMinute,
         );
       } catch (e) {
         debugPrint('Failed to reschedule birthday ${birthday.id}: $e');

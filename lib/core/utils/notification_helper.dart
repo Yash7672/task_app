@@ -6,6 +6,7 @@ import 'package:timezone/timezone.dart' as tz;
 class NotificationHelper {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
+  static bool _initialized = false;
 
   static const AndroidNotificationDetails _androidDetails =
       AndroidNotificationDetails(
@@ -43,10 +44,18 @@ class NotificationHelper {
     icon: '@mipmap/launcher_icon',
   );
 
+  /// Ensure the notification plugin is initialized exactly once.
+  /// Safe to call from any context; idempotent.
+  static Future<void> ensureInitialized() async {
+    if (_initialized) return;
+    await init();
+  }
+
   static Future<void> init() async {
     if (kIsWeb) {
       return;
     }
+    if (_initialized) return;
 
     try {
       final timezoneInfo = await FlutterTimezone.getLocalTimezone();
@@ -67,6 +76,7 @@ class NotificationHelper {
     );
 
     await _notifications.initialize(settings);
+    _initialized = true;
 
     final androidImpl = _notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
@@ -81,12 +91,15 @@ class NotificationHelper {
     );
   }
 
-  static Future<void> showNotification({
+  /// Show an immediate notification using the shared plugin instance.
+  static Future<void> show({
     required int id,
     required String title,
     required String body,
     String? payload,
   }) async {
+    if (kIsWeb) return;
+    await ensureInitialized();
     await _notifications.show(id, title, body, _details(_androidDetails),
         payload: payload);
   }
@@ -199,6 +212,7 @@ class NotificationHelper {
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.dateAndTime,
       );
+      debugPrint('Scheduled yearly reminder "$title" at $scheduled');
     } catch (e) {
       debugPrint('Failed to schedule yearly reminder "$title": $e');
     }
@@ -209,6 +223,8 @@ class NotificationHelper {
     required String name,
     required DateTime nextBirthday,
     required List<int> reminderDaysBefore,
+    int reminderHour = 9,
+    int reminderMinute = 0,
   }) async {
     if (kIsWeb) {
       return;
@@ -220,7 +236,15 @@ class NotificationHelper {
         '${nextBirthday.day}/${nextBirthday.month}';
 
     for (final days in reminderDaysBefore) {
-      final when = nextBirthday.subtract(Duration(days: days));
+      // Build the scheduled DateTime with the user's chosen reminder time.
+      final reminderDate = DateTime(
+        nextBirthday.year,
+        nextBirthday.month,
+        nextBirthday.day,
+        reminderHour,
+        reminderMinute,
+      ).subtract(Duration(days: days));
+
       final body = days == 0
           ? "🎉 Today is $name's birthday! ($dateStr)"
           : days == 1
@@ -234,7 +258,7 @@ class NotificationHelper {
         key: '$birthdayId-$days',
         title: days == 0 ? 'Birthday Today 🎂' : 'Birthday Reminder 🎂',
         body: body,
-        firstOccurrence: when,
+        firstOccurrence: reminderDate,
       );
     }
   }
@@ -309,6 +333,58 @@ class NotificationHelper {
 
   static tz.TZDateTime _toTZDate(DateTime date) {
     return tz.TZDateTime.from(date, tz.local);
+  }
+
+  /// Shared zonedSchedule for use by NotificationService and other callers.
+  static Future<void> zonedSchedule(
+    int id,
+    String title,
+    String body,
+    tz.TZDateTime scheduledDate,
+    NotificationDetails details, {
+    DateTimeComponents? matchDateTimeComponents,
+  }) async {
+    if (kIsWeb) return;
+    await ensureInitialized();
+    try {
+      await _notifications.zonedSchedule(
+        id,
+        title,
+        body,
+        scheduledDate,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: matchDateTimeComponents,
+      );
+    } catch (e) {
+      debugPrint('Failed to zonedSchedule id=$id: $e');
+    }
+  }
+
+  /// Cancel all notifications across all channels.
+  static Future<void> cancelAll() async {
+    if (kIsWeb) return;
+    await ensureInitialized();
+    await _notifications.cancelAll();
+  }
+
+  /// Request notification permissions (iOS).
+  static Future<bool> requestPermissions() async {
+    if (kIsWeb) return true;
+    await ensureInitialized();
+    final platform = _notifications.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
+    if (platform != null) {
+      final permissions = await platform.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return permissions != null;
+    }
+    return true;
   }
 }
 

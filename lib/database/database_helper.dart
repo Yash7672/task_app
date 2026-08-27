@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -16,12 +17,27 @@ class DatabaseHelper {
   DatabaseHelper._internal();
   static Database? _database;
   static String? _cachedDbPath;
+  static Completer<void>? _dbInitCompleter;
 
-  static const int schemaVersion = 7;
+  static const int schemaVersion = 9;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('taskflow.db');
+    // Serialize concurrent callers so only one _initDB runs.
+    if (_dbInitCompleter != null) {
+      await _dbInitCompleter!.future;
+      return _database!;
+    }
+    _dbInitCompleter = Completer<void>();
+    try {
+      _database = await _initDB('taskflow.db');
+      _dbInitCompleter!.complete();
+    } catch (e) {
+      _dbInitCompleter!.completeError(e);
+      rethrow;
+    } finally {
+      _dbInitCompleter = null;
+    }
     return _database!;
   }
 
@@ -120,6 +136,12 @@ class DatabaseHelper {
     if (oldVersion < 7) {
       await _createV7Tables(db);
     }
+    if (oldVersion < 8) {
+      await _createV8Tables(db);
+    }
+    if (oldVersion < 9) {
+      await _createV9Tables(db);
+    }
     // Indexes must run AFTER every table exists: on upgrade paths the
     // checklist_items / focus_sessions tables are only created in v5.
     if (oldVersion > 0 && oldVersion < schemaVersion) {
@@ -163,6 +185,38 @@ class DatabaseHelper {
     ''');
   }
 
+  /// v8 adds per-birthday reminder time (reminderHour, reminderMinute) so
+  /// each birthday can independently control when its notification fires.
+  Future<void> _createV8Tables(Database db) async {
+    // Check if birthdays table exists before trying to alter it (defensive).
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'birthdays'",
+    );
+    if (tables.isEmpty) return;
+
+    // Add columns only if they don't exist (idempotent for upgrade paths).
+    final columns = await db.rawQuery('PRAGMA table_info(birthdays)');
+    if (!columns.any((c) => c['name'] == 'reminderHour')) {
+      await db.execute('ALTER TABLE birthdays ADD COLUMN reminderHour INTEGER DEFAULT 9');
+    }
+    if (!columns.any((c) => c['name'] == 'reminderMinute')) {
+      await db.execute('ALTER TABLE birthdays ADD COLUMN reminderMinute INTEGER DEFAULT 0');
+    }
+  }
+
+  /// v9 adds the `mode` column to `focus_sessions` so strict mode is persisted.
+  Future<void> _createV9Tables(Database db) async {
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'focus_sessions'",
+    );
+    if (tables.isEmpty) return;
+
+    final columns = await db.rawQuery('PRAGMA table_info(focus_sessions)');
+    if (!columns.any((c) => c['name'] == 'mode')) {
+      await db.execute("ALTER TABLE focus_sessions ADD COLUMN mode TEXT DEFAULT 'normal'");
+    }
+  }
+
   Future<void> _createV6Tables(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS habit_log_items (
@@ -179,9 +233,9 @@ class DatabaseHelper {
   Future<void> _createIndexes(Database db) async {
     final indexTargets = <String, List<String>>{
       'tasks': [
-        'CREATE INDEX IF NOT EXISTS idx_tasks_isDeleted_isArchived ON tasks(isDeleted, isArchived)',
-        'CREATE INDEX IF NOT EXISTS idx_tasks_dueDate ON tasks(dueDate)',
+        'CREATE INDEX IF NOT EXISTS idx_tasks_filter_sort ON tasks(isDeleted, isArchived, dueDate)',
         'CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)',
+        'CREATE INDEX IF NOT EXISTS idx_tasks_conflict ON tasks(isDeleted, isArchived, startTime, endTime)',
       ],
       'habit_logs': [
         'CREATE INDEX IF NOT EXISTS idx_habit_logs_habitId ON habit_logs(habitId)',
@@ -248,7 +302,8 @@ class DatabaseHelper {
         startTime INTEGER,
         endTime INTEGER,
         plannedMinutes INTEGER,
-        completed INTEGER DEFAULT 0
+        completed INTEGER DEFAULT 0,
+        mode TEXT DEFAULT 'normal'
       )
     ''');
 
@@ -317,6 +372,7 @@ class DatabaseHelper {
     await _createV5Tables(db);
     await _createV6Tables(db);
     await _createV7Tables(db);
+    await _createV8Tables(db);
 
     final defaultCategories = [
       {'id': '1', 'name': 'Personal', 'colorHex': '#4CAF50', 'icon': '🧘'},
@@ -336,10 +392,12 @@ class DatabaseHelper {
       {'id': '10', 'name': 'Travel', 'colorHex': '#00BCD4', 'icon': '✈️'},
     ];
 
+    final batch = db.batch();
     for (final item in defaultCategories) {
-      await db.insert('categories', item,
+      batch.insert('categories', item,
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
+    await batch.commit(noResult: true);
 
     await _createIndexes(db);
   }
@@ -589,14 +647,16 @@ class DatabaseHelper {
 
   Future<int> deleteHabit(String id) async {
     final db = await database;
-    await db.execute(
-      'DELETE FROM habit_log_items WHERE logId LIKE ?',
-      ['$id-%'],
-    );
-    await db.delete('habit_completion_items',
-        where: 'habitId = ?', whereArgs: [id]);
-    await db.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
-    return db.delete('habits', where: 'id = ?', whereArgs: [id]);
+    return db.transaction((txn) async {
+      await txn.execute(
+        'DELETE FROM habit_log_items WHERE logId LIKE ?',
+        ['$id-%'],
+      );
+      await txn.delete('habit_completion_items',
+          where: 'habitId = ?', whereArgs: [id]);
+      await txn.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
+      return txn.delete('habits', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<List<Map<String, dynamic>>> getHabitLogs(String habitId) async {
@@ -875,11 +935,13 @@ class DatabaseHelper {
 
   Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
     final db = await database;
-    final tables = <String, List<Map<String, dynamic>>>{};
-    for (final table in _knownTables) {
-      tables[table] = await db.query(table);
-    }
-    return tables;
+    return db.transaction((txn) async {
+      final tables = <String, List<Map<String, dynamic>>>{};
+      for (final table in _knownTables) {
+        tables[table] = await txn.query(table);
+      }
+      return tables;
+    });
   }
 
   /// Replaces the contents of ALL known tables with [data].
@@ -899,21 +961,26 @@ class DatabaseHelper {
       }
       for (final entry in data.entries) {
         if (!_knownTables.contains(entry.key)) continue;
+        // Use batch inserts for performance.
+        final batch = txn.batch();
         for (final row in entry.value) {
-          await txn.insert(entry.key, row,
+          batch.insert(entry.key, row,
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
+        await batch.commit(noResult: true);
       }
     });
   }
 
   Future<Map<String, int>> getDataCounts() async {
     final db = await database;
-    final counts = <String, int>{};
-    for (final table in ['tasks', 'habits', 'birthdays']) {
-      final result = await db.rawQuery('SELECT COUNT(*) as c FROM $table');
-      counts[table] = result.first['c'] as int? ?? 0;
-    }
-    return counts;
+    return db.transaction((txn) async {
+      final counts = <String, int>{};
+      for (final table in _knownTables) {
+        final result = await txn.rawQuery('SELECT COUNT(*) as c FROM $table');
+        counts[table] = result.first['c'] as int? ?? 0;
+      }
+      return counts;
+    });
   }
 }

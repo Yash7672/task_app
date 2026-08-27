@@ -14,7 +14,6 @@ import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/birthday_provider.dart';
 import 'providers/preferences_provider.dart';
 import 'providers/settings_provider.dart';
-import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -59,35 +58,28 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
   Future<void> _initBackgroundServices() async {
     final sw = Stopwatch()..start();
 
-    try {
-      await ref.read(settingsProvider.notifier).ensureLoaded();
-    } catch (e) {
-      debugPrint('Settings load failed: $e');
-    }
+    // Settings loaded first (cheap SharedPreferences read) so the theme is
+    // correct, then notifications + birthday reschedule in parallel.
+    await ref.read(settingsProvider.notifier).ensureLoaded();
     StartupBenchmark.mark('preferences_loaded (${sw.elapsedMilliseconds}ms)');
 
     if (!kIsWeb) {
       sw.reset();
-      // Initialize both notification services in parallel — independent work.
+
+      // Notification init and birthday reschedule run concurrently.
+      final prefs = ref.read(settingsPreferencesProvider);
       await Future.wait([
-        NotificationHelper.init().catchError((e) =>
-            debugPrint('NotificationHelper init failed: $e')),
-        NotificationService.initialize().catchError((e) =>
-            debugPrint('NotificationService init failed: $e')),
+        NotificationHelper.init().catchError((e) {
+          if (kDebugMode) debugPrint('NotificationHelper init failed: $e');
+        }),
+        if (prefs.birthdayRemindersEnabled)
+          ref.read(birthdayProvider.notifier).rescheduleAllReminders().catchError((e) {
+            if (kDebugMode) debugPrint('Birthday reschedule failed: $e');
+          }),
       ]);
+
       StartupBenchmark
           .mark('notifications_initialized (${sw.elapsedMilliseconds}ms)');
-
-      // Reschedule birthday reminders for all existing birthdays so
-      // notifications survive app restarts and permission changes.
-      try {
-        final prefs = ref.read(settingsPreferencesProvider);
-        if (prefs.birthdayRemindersEnabled) {
-          await ref.read(birthdayProvider.notifier).rescheduleAllReminders();
-        }
-      } catch (e) {
-        debugPrint('Birthday reschedule failed: $e');
-      }
     }
 
     if (kDebugMode) {

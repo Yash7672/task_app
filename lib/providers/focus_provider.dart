@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_helper.dart';
 import '../models/focus_session_model.dart';
 import '../services/focus/focus_service.dart';
+import '../services/security/pin_service.dart';
 import 'database_provider.dart';
 
 final focusServiceProvider = Provider<FocusService>((ref) => FocusService());
@@ -17,28 +18,33 @@ class FocusState {
   final List<FocusSession> history;
   final int minutesToday;
   final bool isLoading;
+  final bool isStrictMode;
+  final bool isPaused;
 
   const FocusState({
     this.active,
     this.history = const [],
     this.minutesToday = 0,
     this.isLoading = true,
+    this.isStrictMode = false,
+    this.isPaused = false,
   });
 
-  /// [active] uses a sentinel: pass `active: null` explicitly to end a
-  /// session, otherwise the current value is preserved (e.g. refreshHistory
-  /// during a running session must not clear it).
   FocusState copyWithState({
     Object? active = _clearActive,
     List<FocusSession>? history,
     int? minutesToday,
     bool? isLoading,
+    bool? isStrictMode,
+    bool? isPaused,
   }) {
     return FocusState(
       active: active == _clearActive ? this.active : active as ActiveFocus?,
       history: history ?? this.history,
       minutesToday: minutesToday ?? this.minutesToday,
       isLoading: isLoading ?? this.isLoading,
+      isStrictMode: isStrictMode ?? this.isStrictMode,
+      isPaused: isPaused ?? this.isPaused,
     );
   }
 }
@@ -56,8 +62,13 @@ class FocusNotifier extends StateNotifier<FocusState> {
   Future<void> _restore() async {
     try {
       final active = await _service.loadActiveSession();
+      final strictPref = await _service.isStrictMode();
       await refreshHistory();
-      state = state.copyWithState(active: active, isLoading: false);
+      state = state.copyWithState(
+        active: active,
+        isStrictMode: strictPref,
+        isLoading: false,
+      );
       if (active != null) _startTicker();
     } catch (e) {
       debugPrint('Focus restore failed: $e');
@@ -98,26 +109,39 @@ class FocusNotifier extends StateNotifier<FocusState> {
     state = state.copyWithState(active: active);
   }
 
+  Future<void> setStrictMode(bool value) async {
+    await _service.setStrictMode(value);
+    state = state.copyWithState(isStrictMode: value);
+  }
+
   Future<void> startFocus({
     required String label,
     String? taskId,
     required int minutes,
+    required FocusMode mode,
   }) async {
     if (state.active != null || _starting) return;
-    // Synchronous flag: the check-then-act below crosses awaits, so without
-    // it a rapid double-tap starts two sessions and clobbers the first.
     _starting = true;
     try {
       final session = await _service.startFocus(
         label: label,
         taskId: taskId,
         minutes: minutes,
+        mode: mode,
       );
-      state = state.copyWithState(active: session);
+      state = state.copyWithState(
+        active: session,
+        isStrictMode: mode == FocusMode.strict,
+        isPaused: false,
+      );
       _startTicker();
     } finally {
       _starting = false;
     }
+  }
+
+  Future<bool> verifyPinForExit(String pin) async {
+    return PinService.verifyPin(pin);
   }
 
   Future<void> stopSession() async {
@@ -125,7 +149,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
     if (active == null) return;
     _ticker?.cancel();
     await _service.stopFocus(active, completed: false);
-    state = state.copyWithState(active: null);
+    state = state.copyWithState(active: null, isPaused: false);
     await refreshHistory();
   }
 
@@ -134,7 +158,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
     if (active == null) return;
     _ticker?.cancel();
     await _service.stopFocus(active, completed: true);
-    state = state.copyWithState(active: null);
+    state = state.copyWithState(active: null, isPaused: false);
     await refreshHistory();
   }
 

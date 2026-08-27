@@ -53,7 +53,7 @@ class HabitCompletionItem {
 
   factory HabitCompletionItem.fromMap(Map<String, dynamic> map) {
     return HabitCompletionItem(
-      id: map['id'] as String,
+      id: map['id'] as String? ?? '',
       habitId: map['habitId'] as String? ?? '',
       completionDate: map['completionDate'] as String? ?? '',
       text: map['text'] as String? ?? '',

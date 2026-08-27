@@ -1,52 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+import '../core/utils/notification_helper.dart';
+
+/// Thin wrapper around [NotificationHelper] for habit-related notifications.
+/// All heavy lifting (plugin init, timezone, permissions) is handled by
+/// [NotificationHelper.init] — this class only provides convenience methods
+/// for the settings screen and habit reminders.
 class NotificationService {
-  static final FlutterLocalNotificationsPlugin _notifications =
-      FlutterLocalNotificationsPlugin();
-  static bool _initialized = false;
-
-  /// Idempotent: safe to call before every scheduling call. The settings
-  /// screen uses this service directly without going through
-  /// [NotificationHelper.init], so lazy init is required for the daily
-  /// habit reminder to actually fire.
-  static Future<void> initialize() async {
-    if (_initialized) return;
-    try {
-      final timezoneInfo = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
-    } catch (e) {
-      debugPrint('Timezone init failed: $e');
-    }
-
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/launcher_icon');
-
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _notifications.initialize(settings);
-    _initialized = true;
-
-    await _notifications
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
-  }
+  /// No-op: initialization is handled by [NotificationHelper.init].
+  /// Kept for call-site compatibility (settings screen, providers).
+  static Future<void> initialize() async => NotificationHelper.ensureInitialized();
 
   static Future<bool> scheduleDailyReminder({
     required int hour,
@@ -54,21 +19,22 @@ class NotificationService {
   }) async {
     if (kIsWeb) return false;
     try {
-      await initialize();
-      await _notifications.cancel(0);
+      await NotificationHelper.ensureInitialized();
+      await NotificationHelper.cancel(0);
 
+      final now = DateTime.now();
       final scheduledTime = tz.TZDateTime(
         tz.local,
-        DateTime.now().year,
-        DateTime.now().month,
-        DateTime.now().day,
+        now.year,
+        now.month,
+        now.day,
         hour,
         minute,
       );
 
-      final now = tz.TZDateTime.now(tz.local);
+      final tzNow = tz.TZDateTime.now(tz.local);
       var scheduledDate = scheduledTime;
-      if (scheduledDate.isBefore(now)) {
+      if (scheduledDate.isBefore(tzNow)) {
         scheduledDate = scheduledDate.add(const Duration(days: 1));
       }
 
@@ -91,15 +57,12 @@ class NotificationService {
         iOS: iosDetails,
       );
 
-      await _notifications.zonedSchedule(
+      await NotificationHelper.zonedSchedule(
         0,
         '⏰ Time to complete your habits!',
         'Don\'t break your streak! Open the app and mark your progress.',
         scheduledDate,
         platformDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
 
@@ -118,31 +81,8 @@ class NotificationService {
   static Future<void> showImmediateNotification(
       String title, String body) async {
     if (kIsWeb) return;
-    await initialize();
-    const androidDetails = AndroidNotificationDetails(
-      'habit_reminder_channel',
-      'Habit Reminders',
-      channelDescription: 'Daily reminder to complete your habits',
-      importance: Importance.max,
-      priority: Priority.high,
-      icon: '@mipmap/launcher_icon',
-    );
-
-    const iosDetails = DarwinNotificationDetails(
-      sound: 'default.wav',
-    );
-
-    const platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _notifications.show(
-      1,
-      title,
-      body,
-      platformDetails,
-    );
+    await NotificationHelper.ensureInitialized();
+    await NotificationHelper.show(id: 1, title: title, body: body);
   }
 
   static Future<void> sendStreakNotification({
@@ -150,23 +90,7 @@ class NotificationService {
     required int streakCount,
   }) async {
     if (kIsWeb) return;
-    await initialize();
-    const androidDetails = AndroidNotificationDetails(
-      'streak_channel',
-      'Streak Updates',
-      channelDescription: 'Celebrate your streak achievements!',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-
-    const iosDetails = DarwinNotificationDetails(
-      sound: 'default.wav',
-    );
-
-    const platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+    await NotificationHelper.ensureInitialized();
 
     final message = streakCount >= 30
         ? '🔥 Amazing! $streakCount day streak! You\'re on fire!'
@@ -174,43 +98,32 @@ class NotificationService {
             ? '🌟 $streakCount day streak! Keep going!'
             : '✅ $streakCount day streak! You\'re building a great habit!';
 
-    await _notifications.show(
-      2,
-      '🎉 Streak Update: $habitName',
-      message,
-      platformDetails,
+    await NotificationHelper.show(
+      id: 2,
+      title: '🎉 Streak Update: $habitName',
+      body: message,
     );
   }
 
   static Future<void> cancelAllNotifications() async {
     if (kIsWeb) return;
-    await initialize();
-    await _notifications.cancelAll();
+    await NotificationHelper.ensureInitialized();
+    await NotificationHelper.cancelAll();
   }
 
   static Future<void> cancelDailyReminder() async {
     if (kIsWeb) return;
-    await initialize();
-    await _notifications.cancel(0);
+    await NotificationHelper.ensureInitialized();
+    await NotificationHelper.cancel(0);
   }
 
   static Future<void> cancelNotification(int id) async {
     if (kIsWeb) return;
-    await initialize();
-    await _notifications.cancel(id);
+    await NotificationHelper.ensureInitialized();
+    await NotificationHelper.cancel(id);
   }
 
   static Future<bool> checkPermissions() async {
-    final platform = _notifications.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
-    if (platform != null) {
-      final permissions = await platform.requestPermissions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      return permissions != null;
-    }
-    return true;
+    return NotificationHelper.requestPermissions();
   }
 }

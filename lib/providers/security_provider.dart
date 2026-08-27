@@ -101,6 +101,14 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   int _failedAttempts = 0;
   DateTime? _lockoutUntil;
 
+  /// Cached SharedPreferences instance — avoids repeated async lookups.
+  SharedPreferences? _prefs;
+
+  Future<SharedPreferences> _getPrefs() async {
+    _prefs ??= await SharedPreferences.getInstance();
+    return _prefs!;
+  }
+
   /// Number of consecutive wrong PINs since the last successful unlock.
   int get pinFailedAttempts => _failedAttempts;
 
@@ -115,20 +123,18 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
 
   Future<void> load() async {
     try {
-      // Run SharedPreferences, PinService, and brute-force state in parallel.
-      // Biometric checks are slow platform calls — fire them in parallel too
-      // and update state when they complete.
+      // Phase 1: Fast-critical path — only SharedPreferences + PIN check.
+      // This determines whether auth is needed at all and must complete
+      // before the lock screen can render. Biometric checks are slow
+      // platform calls and are deferred to Phase 2 so the lock screen
+      // appears instantly.
       final results = await Future.wait([
-        SharedPreferences.getInstance(),
+        _getPrefs(),
         PinService.hasPin(),
-        BiometricService.isAvailable(),
-        BiometricService.hasFace(),
       ]);
 
       final prefs = results[0] as SharedPreferences;
       final hasPin = results[1] as bool;
-      final biometricAvailable = results[2] as bool;
-      final faceIdAvailable = results[3] as bool;
 
       var appLockEnabled = prefs.getBool('app_lock_enabled') ?? false;
 
@@ -150,21 +156,52 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
         debugPrint('App Lock self-healed: stored PIN missing');
       }
 
+      // Show lock screen immediately with biometrics assumed unavailable.
+      // Phase 2 will update biometric state once the platform responds.
       state = state.copyWith(
         isLoading: false,
         appLockEnabled: appLockEnabled && hasPin,
         biometricEnabled: prefs.getBool('biometric_enabled') ?? false,
-        biometricAvailable: biometricAvailable,
+        biometricAvailable: false,
         faceIdEnabled: prefs.getBool('face_id_enabled') ?? false,
-        faceIdAvailable: faceIdAvailable,
+        faceIdAvailable: false,
         hasPin: hasPin,
         lockTimeout:
             LockTimeoutX.fromName(prefs.getString('lock_timeout')),
         isLocked: true,
       );
+
+      // Phase 2: Deferred biometric check — runs after the lock screen
+      // is already visible. Updates state when complete so the biometric
+      // button appears (or stays hidden) once we know availability.
+      _loadBiometricsInBackground();
     } catch (e) {
       debugPrint('Security load failed: $e');
       state = state.copyWith(isLoading: false);
+    }
+  }
+
+  /// Checks biometric/face availability without blocking the UI.
+  /// State is updated when the platform responds, causing the lock screen
+  /// to re-render with the correct biometric button visibility.
+  Future<void> _loadBiometricsInBackground() async {
+    try {
+      final results = await Future.wait([
+        BiometricService.isAvailable(),
+        BiometricService.hasFace(),
+      ]);
+      final biometricAvailable = results[0];
+      final faceIdAvailable = results[1];
+      if (!mounted) return;
+      if (state.biometricAvailable != biometricAvailable ||
+          state.faceIdAvailable != faceIdAvailable) {
+        state = state.copyWith(
+          biometricAvailable: biometricAvailable,
+          faceIdAvailable: faceIdAvailable,
+        );
+      }
+    } catch (e) {
+      debugPrint('Biometric background check failed: $e');
     }
   }
 
@@ -182,7 +219,7 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
 
   Future<bool> enableAppLock(String pin) async {
     await PinService.setPin(pin);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setBool('app_lock_enabled', true);
     state = state.copyWith(
       appLockEnabled: true,
@@ -195,7 +232,7 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   }
 
   Future<void> disableAppLock() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setBool('app_lock_enabled', false);
     await prefs.setBool('biometric_enabled', false);
     await prefs.setBool('face_id_enabled', false);
@@ -210,13 +247,13 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   }
 
   Future<void> setBiometricEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setBool('biometric_enabled', enabled);
     state = state.copyWith(biometricEnabled: enabled);
   }
 
   Future<void> setFaceIdEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setBool('face_id_enabled', enabled);
     state = state.copyWith(faceIdEnabled: enabled);
   }
@@ -277,7 +314,7 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   /// tell the user which happened.
   Future<bool> verifyPinWithThrottle(String pin) async {
     if (isPinLockedOut) return false;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final ok = await PinService.verifyPin(pin);
     if (ok) {
       _failedAttempts = 0;
@@ -300,19 +337,20 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   }
 
   Future<void> setLockTimeout(LockTimeout timeout) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setString('lock_timeout', timeout.name);
     state = state.copyWith(lockTimeout: timeout);
   }
 
   void unlock() {
+    if (!state.isLocked) return;
     state = state.copyWith(isLocked: false);
     _pausedAt = null;
     // A successful unlock (PIN or biometric) resets the throttle.
     if (_failedAttempts > 0 || _lockoutUntil != null) {
       _failedAttempts = 0;
       _lockoutUntil = null;
-      SharedPreferences.getInstance().then((prefs) {
+      _getPrefs().then((prefs) {
         prefs.remove('pin_failed_attempts');
         prefs.remove('pin_lockout_until_ms');
       });
@@ -320,7 +358,7 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   }
 
   void lockNow() {
-    if (state.appLockEnabled && state.hasPin) {
+    if (state.appLockEnabled && state.hasPin && !state.isLocked) {
       state = state.copyWith(isLocked: true);
     }
   }
@@ -335,6 +373,7 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     _pausedAt = null;
     if (state.appLockEnabled &&
         state.hasPin &&
+        !state.isLocked &&
         elapsed >= state.lockTimeout.duration) {
       state = state.copyWith(isLocked: true);
     }

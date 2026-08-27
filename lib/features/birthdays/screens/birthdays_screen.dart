@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/widgets/dialog_disposer.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/widgets/dialog_disposer.dart';
 import '../../../models/birthday_model.dart';
 import '../../../providers/birthday_provider.dart';
 import '../../../providers/preferences_provider.dart';
@@ -84,33 +85,41 @@ class BirthdaysScreen extends ConsumerWidget {
         birthday?.birthDate ?? DateTime(2000, 1, 1);
     List<int> selectedReminders =
         birthday != null ? List.from(birthday.reminderDaysBefore) : [0];
+    int reminderHour = birthday?.reminderHour ?? 9;
+    int reminderMinute = birthday?.reminderMinute ?? 0;
     final notificationsEnabled =
         ref.read(settingsPreferencesProvider).birthdayRemindersEnabled;
+    String? validationError;
+
+    final controllers = [nameController, phoneController, notesController];
 
     final result = await showDialog<Birthday>(
       context: context,
       builder: (dialogContext) => DisposeOnExit(
-        controllers: [nameController, phoneController, notesController],
+        controllers: controllers,
         child: StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(birthday == null ? 'Add Birthday' : 'Edit Birthday'),
+          title: Text(birthday == null ? '🎂 Add Birthday' : '🎂 Edit Birthday'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
                   controller: nameController,
                   autofocus: true,
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
-                      labelText: 'Name', prefixIcon: Icon(Icons.person_outline)),
+                      labelText: 'Name',
+                      prefixIcon: Icon(Icons.person_outline)),
                 ),
                 const SizedBox(height: 12),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.cake_outlined),
-                  title: const Text('Date'),
+                  title: const Text('Birthday'),
                   subtitle: Text(
-                      '${selectedDate.day} ${_monthName(selectedDate.month)}'),
+                      '${selectedDate.day} ${_monthName(selectedDate.month)} ${selectedDate.year}'),
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: dialogContext,
@@ -136,14 +145,13 @@ class BirthdaysScreen extends ConsumerWidget {
                   decoration: const InputDecoration(
                       labelText: 'Notes (optional)'),
                 ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Remind me',
-                      style: Theme.of(context).textTheme.titleSmall),
-                ),
+                const SizedBox(height: 16),
+                Text('Remind me',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
                 Wrap(
-                  spacing: 6,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [0, 1, 3, 7].map((days) {
                     final selected = selectedReminders.contains(days);
                     return FilterChip(
@@ -161,11 +169,48 @@ class BirthdaysScreen extends ConsumerWidget {
                           } else {
                             selectedReminders.remove(days);
                           }
+                          validationError = null;
                         });
                       },
                     );
                   }).toList(),
                 ),
+                const SizedBox(height: 16),
+                Text('Reminder time',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.access_time),
+                  title: Text(
+                    DateFormat('hh:mm a').format(
+                        DateTime(2024, 1, 1, reminderHour, reminderMinute)),
+                  ),
+                  trailing: const Icon(Icons.edit_outlined, size: 20),
+                  onTap: () async {
+                    final picked = await showTimePicker(
+                      context: dialogContext,
+                      initialTime: TimeOfDay(
+                          hour: reminderHour, minute: reminderMinute),
+                    );
+                    if (picked != null) {
+                      setDialogState(() {
+                        reminderHour = picked.hour;
+                        reminderMinute = picked.minute;
+                      });
+                    }
+                  },
+                ),
+                if (validationError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      validationError!,
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -175,7 +220,15 @@ class BirthdaysScreen extends ConsumerWidget {
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                if (nameController.text.trim().isEmpty) return;
+                if (nameController.text.trim().isEmpty) {
+                  setDialogState(() => validationError = 'Name is required.');
+                  return;
+                }
+                if (selectedReminders.isEmpty) {
+                  setDialogState(() =>
+                      validationError = 'Select at least one reminder.');
+                  return;
+                }
                 Navigator.pop(
                   context,
                   Birthday(
@@ -184,9 +237,9 @@ class BirthdaysScreen extends ConsumerWidget {
                     birthDate: selectedDate,
                     phone: phoneController.text.trim(),
                     notes: notesController.text.trim(),
-                    reminderDaysBefore: selectedReminders.isEmpty
-                        ? [0]
-                        : selectedReminders..sort(),
+                    reminderDaysBefore: selectedReminders..sort(),
+                    reminderHour: reminderHour,
+                    reminderMinute: reminderMinute,
                     createdAt: birthday?.createdAt,
                   ),
                 );
@@ -195,7 +248,7 @@ class BirthdaysScreen extends ConsumerWidget {
             ),
           ],
         ),
-        ),
+      ),
       ),
     );
 
@@ -235,8 +288,8 @@ class BirthdaysScreen extends ConsumerWidget {
   }
 
   String _monthName(int month) => switch (month) {
-        1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr',
-        5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Aug',
-        9 => 'Sep', 10 => 'Oct', 11 => 'Nov', _ => 'Dec',
+        1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+        5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+        9 => 'September', 10 => 'October', 11 => 'November', _ => 'December',
       };
 }

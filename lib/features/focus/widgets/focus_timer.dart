@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../models/focus_session_model.dart';
 import '../../../services/focus/focus_service.dart';
 
 class FocusTimer extends StatefulWidget {
@@ -43,6 +44,7 @@ class _FocusTimerState extends State<FocusTimer> {
     final theme = Theme.of(context);
     final remaining = widget.session.remaining;
     final progress = widget.session.progress;
+    final isStrict = widget.session.mode == FocusMode.strict;
 
     return SizedBox(
       width: widget.size,
@@ -69,6 +71,14 @@ class _FocusTimerState extends State<FocusTimer> {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Icon(
+                isStrict ? Icons.lock_outline_rounded : Icons.psychology,
+                size: 28,
+                color: isStrict
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.tertiary,
+              ),
+              const SizedBox(height: 4),
               Text(
                 _format(remaining),
                 style: theme.textTheme.displayMedium
@@ -76,9 +86,11 @@ class _FocusTimerState extends State<FocusTimer> {
               ),
               const SizedBox(height: 4),
               Text(
-                '🔥 FOCUS MODE',
+                isStrict ? '🔒 STRICT FOCUS' : '🎯 FOCUS MODE',
                 style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.primary,
+                    color: isStrict
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.tertiary,
                     fontWeight: FontWeight.w700),
               ),
             ],

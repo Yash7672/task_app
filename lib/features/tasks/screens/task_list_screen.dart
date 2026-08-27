@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/task_model.dart';
 import '../../../providers/task_provider.dart';
 import '../../dashboard/widgets/task_list_item.dart';
 
@@ -27,7 +28,12 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
   @override
   Widget build(BuildContext context) {
     final tasks = ref.watch(allTasksProvider);
-    final filteredTasks = tasks.where((task) {
+    final showArchived = _showArchived || _filter == 'Archived';
+    final archivedTasks = showArchived
+        ? ref.watch(archivedTasksProvider).valueOrNull ?? []
+        : const <Task>[];
+    final allVisibleTasks = [...tasks, ...archivedTasks];
+    final filteredTasks = allVisibleTasks.where((task) {
       final matchesQuery = _queryLower.isEmpty ||
           task.title.toLowerCase().contains(_queryLower) ||
           task.category.toLowerCase().contains(_queryLower) ||
@@ -42,9 +48,7 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
         _ => true,
       };
 
-      final matchesArchiveVisibility =
-          _filter == 'Archived' || _showArchived || !task.isArchived;
-      return matchesQuery && matchesFilter && matchesArchiveVisibility;
+      return matchesQuery && matchesFilter;
     }).toList();
 
     return Scaffold(

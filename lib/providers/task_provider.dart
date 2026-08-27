@@ -53,7 +53,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> loadTasks() async {
     try {
       state = const AsyncValue.loading();
-      final tasks = await dbHelper.getAllTasks(includeArchived: true);
+      final tasks = await dbHelper.getAllTasks();
       state = AsyncValue.data(_sortTasks(tasks));
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -86,9 +86,12 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
         _updateState([..._currentTasks, task]);
       } catch (e) {
         debugPrint('Error adding task: $e');
+        rethrow;
       }
     });
-    _appendQueue = run.catchError((Object _) {});
+    _appendQueue = run.catchError((Object e) {
+      debugPrint('Append queue error (task): $e');
+    });
     await run;
   }
 
@@ -111,15 +114,11 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   }
 
   Future<void> archiveTask(String id) async {
-    // Update the UI optimistically BEFORE persisting: Dismissible widgets
-    // must leave the tree on the same frame the swipe finishes, otherwise
-    // Flutter throws 'dismissed widget still part of the tree'.
     final tasks = _currentTasks;
     final index = tasks.indexWhere((t) => t.id == id);
     if (index != -1) {
       final updated = List<Task>.from(tasks);
-      updated[index] =
-          updated[index].copyWith(isArchived: true, updatedAt: DateTime.now());
+      updated.removeAt(index);
       _updateState(updated);
     }
     try {
@@ -134,14 +133,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   Future<void> restoreTask(String id) async {
     try {
       await dbHelper.restoreTask(id);
-      final tasks = _currentTasks;
-      final index = tasks.indexWhere((t) => t.id == id);
-      if (index != -1) {
-        final updated = List<Task>.from(tasks);
-        updated[index] = updated[index]
-            .copyWith(isArchived: false, isDeleted: false, updatedAt: DateTime.now());
-        _updateState(updated);
-      }
+      await loadTasks();
     } catch (e) {
       debugPrint('Error restoring task: $e');
     }
@@ -152,13 +144,11 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   }
 
   Future<void> deleteTask(String id) async {
-    // Optimistic update first — see archiveTask for why.
     final tasks = _currentTasks;
     final index = tasks.indexWhere((t) => t.id == id);
     if (index != -1) {
       final updated = List<Task>.from(tasks);
-      updated[index] = updated[index].copyWith(
-          isDeleted: true, isArchived: true, updatedAt: DateTime.now());
+      updated.removeAt(index);
       _updateState(updated);
     }
     try {
@@ -283,7 +273,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
 final allTasksProvider = Provider<List<Task>>((ref) {
   final state = ref.watch(taskProvider);
   return state.maybeWhen(
-    data: (tasks) => tasks.where((task) => !task.isDeleted).toList(),
+    data: (tasks) => tasks,
     orElse: () => [],
   );
 });
@@ -296,9 +286,7 @@ final todayTasksProvider = Provider<List<Task>>((ref) {
   return tasks.where((task) {
     final taskDate =
         DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    return taskDate.isAtSameMomentAs(today) &&
-        !task.isArchived &&
-        !task.isDeleted;
+    return taskDate.isAtSameMomentAs(today);
   }).toList();
 });
 
@@ -310,7 +298,7 @@ final upcomingTasksProvider = Provider<List<Task>>((ref) {
   return tasks.where((task) {
     final taskDate =
         DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    return taskDate.isAfter(today) && !task.isArchived && !task.isDeleted;
+    return taskDate.isAfter(today);
   }).toList();
 });
 
@@ -322,18 +310,19 @@ final overdueTasksProvider = Provider<List<Task>>((ref) {
   return tasks.where((task) {
     final taskDate =
         DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    return taskDate.isBefore(today) &&
-        !task.isCompleted &&
-        !task.isArchived &&
-        !task.isDeleted;
+    return taskDate.isBefore(today) && !task.isCompleted;
   }).toList();
 });
 
 final favoritesProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
-  return tasks
-      .where((task) => task.isFavorite && !task.isArchived)
-      .toList();
+  return tasks.where((task) => task.isFavorite).toList();
+});
+
+final archivedTasksProvider =
+    FutureProvider.autoDispose<List<Task>>((ref) async {
+  final dbHelper = ref.watch(databaseProvider);
+  return dbHelper.getArchivedTasks();
 });
 
 final categoriesProvider =
@@ -378,10 +367,17 @@ class CategoriesNotifier extends StateNotifier<AsyncValue<List<TaskCategory>>> {
       throw StateError('A category named "$name" already exists.');
     }
     final run = (_appendQueue ?? Future.value()).then((_) async {
-      await dbHelper.createCategory(category);
-      state = AsyncValue.data([..._current, category]);
+      try {
+        await dbHelper.createCategory(category);
+        state = AsyncValue.data([..._current, category]);
+      } catch (e) {
+        debugPrint('Error adding category: $e');
+        rethrow;
+      }
     });
-    _appendQueue = run.catchError((Object _) {});
+    _appendQueue = run.catchError((Object e) {
+      debugPrint('Append queue error (category): $e');
+    });
     return run;
   }
 
@@ -655,9 +651,12 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
         _updateState([habit, ..._currentHabits]);
       } catch (e) {
         debugPrint('Error adding habit: $e');
+        rethrow;
       }
     });
-    _appendQueue = run.catchError((Object _) {});
+    _appendQueue = run.catchError((Object e) {
+      debugPrint('Append queue error (habit): $e');
+    });
     await run;
   }
 

@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../models/focus_session_model.dart';
 import '../../../providers/focus_provider.dart';
 import '../../../providers/task_provider.dart';
-import '../../../services/focus/focus_service.dart';
-import '../widgets/focus_timer.dart';
+import 'focus_active_screen.dart';
 
-class FocusScreen extends ConsumerWidget {
+class FocusScreen extends ConsumerStatefulWidget {
   const FocusScreen({super.key});
 
-  static const presetDurations = [25, 45, 60, 90];
+  static const presetDurations = [15, 25, 30, 45, 60];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FocusScreen> createState() => _FocusScreenState();
+}
+
+class _FocusScreenState extends ConsumerState<FocusScreen> {
+  bool _navigatedToActive = false;
+
+  @override
+  Widget build(BuildContext context) {
     final focus = ref.watch(focusProvider);
-    final theme = Theme.of(context);
 
     if (focus.isLoading) {
       return Scaffold(
@@ -24,9 +30,24 @@ class FocusScreen extends ConsumerWidget {
     }
 
     final active = focus.active;
+    if (active != null && !_navigatedToActive) {
+      _navigatedToActive = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const FocusActiveScreen()),
+          );
+        }
+      });
+      return Scaffold(
+        appBar: AppBar(title: const Text('Focus Mode')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🎯 Focus Mode'),
+        title: const Text('Focus Mode'),
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
@@ -35,9 +56,7 @@ class FocusScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: active != null
-          ? _ActiveSession(session: active)
-          : _SetupView(theme: theme),
+      body: const _SetupView(),
     );
   }
 
@@ -77,13 +96,15 @@ class FocusScreen extends ConsumerWidget {
                         s.completed
                             ? Icons.check_circle
                             : Icons.stop_circle_outlined,
-                        color:
-                            s.completed ? Colors.green : Colors.grey,
+                        color: s.completed ? Colors.green : Colors.grey,
                       ),
                       title: Text(s.label.isEmpty ? 'Focus session' : s.label),
                       subtitle: Text(
                           '${_formatMinutes(s.actualMinutes)} • ${s.startTime.day}/${s.startTime.month} '
                           '${s.startTime.hour.toString().padLeft(2, '0')}:${s.startTime.minute.toString().padLeft(2, '0')}'),
+                      trailing: s.mode == FocusMode.strict
+                          ? const Icon(Icons.lock, size: 16)
+                          : null,
                     )),
             ],
           ),
@@ -101,9 +122,7 @@ class FocusScreen extends ConsumerWidget {
 }
 
 class _SetupView extends ConsumerStatefulWidget {
-  final ThemeData theme;
-
-  const _SetupView({required this.theme});
+  const _SetupView();
 
   @override
   ConsumerState<_SetupView> createState() => _SetupViewState();
@@ -111,19 +130,37 @@ class _SetupView extends ConsumerStatefulWidget {
 
 class _SetupViewState extends ConsumerState<_SetupView> {
   int _selectedMinutes = 25;
+  bool _isCustomDuration = false;
+  final TextEditingController _customDurationController =
+      TextEditingController();
   String? _selectedTaskId;
   late TextEditingController _labelController;
+  late FocusMode _selectedMode;
 
   @override
   void initState() {
     super.initState();
     _labelController = TextEditingController();
+    final focusState = ref.read(focusProvider);
+    _selectedMode = focusState.isStrictMode
+        ? FocusMode.strict
+        : FocusMode.normal;
   }
 
   @override
   void dispose() {
     _labelController.dispose();
+    _customDurationController.dispose();
     super.dispose();
+  }
+
+  int get _effectiveMinutes {
+    if (_isCustomDuration) {
+      final parsed = int.tryParse(_customDurationController.text);
+      if (parsed != null && parsed >= 1 && parsed <= 480) return parsed;
+      return 25;
+    }
+    return _selectedMinutes;
   }
 
   @override
@@ -132,17 +169,16 @@ class _SetupViewState extends ConsumerState<_SetupView> {
     final pendingTasks =
         todayTasks.where((t) => !t.isCompleted).toList();
 
-    // Clear stale selection when the task disappears (completed/archived elsewhere)
     ref.listen(todayTasksProvider, (prev, next) {
       final pending = next.where((t) => !t.isCompleted).toList();
-      if (_selectedTaskId != null && !pending.any((t) => t.id == _selectedTaskId)) {
+      if (_selectedTaskId != null &&
+          !pending.any((t) => t.id == _selectedTaskId)) {
         _selectedTaskId = null;
         _labelController.clear();
       }
     });
-    final selectedTask = pendingTasks
-        .where((t) => t.id == _selectedTaskId)
-        .firstOrNull;
+    final selectedTask =
+        pendingTasks.where((t) => t.id == _selectedTaskId).firstOrNull;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -155,41 +191,35 @@ class _SetupViewState extends ConsumerState<_SetupView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Duration',
-                      style: widget.theme.textTheme.titleMedium
+                  Text('Mode',
+                      style: Theme.of(context).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: FocusScreen.presetDurations
-                        .map((m) => ChoiceChip(
-                              label: Text('$m min'),
-                              selected: _selectedMinutes == m,
-                              onSelected: (_) =>
-                                  setState(() => _selectedMinutes = m),
-                            ))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
-                        child: Slider(
-                          value: _selectedMinutes.toDouble(),
-                          min: 5,
-                          max: 120,
-                          divisions: 23,
-                          label: '$_selectedMinutes min',
-                          onChanged: (value) =>
-                              setState(() => _selectedMinutes = value.round()),
+                        child: _ModeCard(
+                          icon: Icons.psychology,
+                          title: 'Normal',
+                          subtitle: 'Light restrictions',
+                          isSelected: _selectedMode == FocusMode.normal,
+                          onTap: () =>
+                              setState(() => _selectedMode = FocusMode.normal),
+                          theme: Theme.of(context),
                         ),
                       ),
-                      SizedBox(
-                        width: 60,
-                        child: Text('$_selectedMinutes min',
-                            textAlign: TextAlign.end,
-                            style: widget.theme.textTheme.titleSmall),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _ModeCard(
+                          icon: Icons.lock_outline,
+                          title: 'Strict',
+                          subtitle: 'PIN to end early',
+                          isSelected: _selectedMode == FocusMode.strict,
+                          onTap: () =>
+                              setState(() => _selectedMode = FocusMode.strict),
+                          theme: Theme.of(context),
+                          accentColor: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -204,8 +234,82 @@ class _SetupViewState extends ConsumerState<_SetupView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('Duration',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ...FocusScreen.presetDurations.map((m) => ChoiceChip(
+                            label: Text('$m min'),
+                            selected:
+                                !_isCustomDuration && _selectedMinutes == m,
+                            onSelected: (_) => setState(() {
+                              _selectedMinutes = m;
+                              _isCustomDuration = false;
+                            }),
+                          )),
+                      ChoiceChip(
+                        label: const Text('Custom'),
+                        selected: _isCustomDuration,
+                        onSelected: (_) => setState(() {
+                          _isCustomDuration = true;
+                        }),
+                      ),
+                    ],
+                  ),
+                  if (!_isCustomDuration) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Slider(
+                            value: _selectedMinutes.toDouble(),
+                            min: 5,
+                            max: 120,
+                            divisions: 23,
+                            label: '$_selectedMinutes min',
+                            onChanged: (value) => setState(
+                                () => _selectedMinutes = value.round()),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 60,
+                          child: Text('$_selectedMinutes min',
+                              textAlign: TextAlign.end,
+                              style: Theme.of(context).textTheme.titleSmall),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (_isCustomDuration) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _customDurationController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Minutes (1 - 480)',
+                        border: OutlineInputBorder(),
+                        suffixText: 'min',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text('What are you focusing on?',
-                      style: widget.theme.textTheme.titleMedium
+                      style: Theme.of(context).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   InputDecorator(
@@ -218,8 +322,8 @@ class _SetupViewState extends ConsumerState<_SetupView> {
                       isExpanded: true,
                       underline: const SizedBox.shrink(),
                       items: pendingTasks
-                          .map((t) =>
-                              DropdownMenuItem(value: t.id, child: Text(t.title)))
+                          .map((t) => DropdownMenuItem(
+                              value: t.id, child: Text(t.title)))
                           .toList(),
                       onChanged: (value) {
                         setState(() {
@@ -240,7 +344,8 @@ class _SetupViewState extends ConsumerState<_SetupView> {
                   TextField(
                     controller: _labelController,
                     decoration: const InputDecoration(
-                        labelText: 'Or type a label', border: OutlineInputBorder()),
+                        labelText: 'Or type a label',
+                        border: OutlineInputBorder()),
                   ),
                 ],
               ),
@@ -253,16 +358,26 @@ class _SetupViewState extends ConsumerState<_SetupView> {
               padding: const EdgeInsets.symmetric(vertical: 18),
               backgroundColor: Colors.deepPurple,
             ),
-            icon: const Icon(Icons.play_arrow_rounded, size: 28),
-            label: const Text('START FOCUS',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            icon: Icon(
+              _selectedMode == FocusMode.strict
+                  ? Icons.lock_outline
+                  : Icons.play_arrow_rounded,
+              size: 28,
+            ),
+            label: Text(
+              _selectedMode == FocusMode.strict
+                  ? 'START STRICT FOCUS'
+                  : 'START FOCUS',
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 12),
           Center(
             child: Text(
               'Calls and notifications still arrive.\nPYLO just helps you stay on one thing.',
               textAlign: TextAlign.center,
-              style: widget.theme.textTheme.bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: Colors.grey[600]),
             ),
           ),
@@ -276,72 +391,78 @@ class _SetupViewState extends ConsumerState<_SetupView> {
         (_labelController.text.trim().isNotEmpty
             ? _labelController.text.trim()
             : 'Focus session');
+
     await ref.read(focusProvider.notifier).startFocus(
           label: label,
           taskId: _selectedTaskId,
-          minutes: _selectedMinutes,
+          minutes: _effectiveMinutes,
+          mode: _selectedMode,
         );
+
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const FocusActiveScreen()),
+      );
+    }
   }
 }
 
-class _ActiveSession extends ConsumerWidget {
-  final ActiveFocus session;
+class _ModeCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final ThemeData theme;
+  final Color? accentColor;
 
-  const _ActiveSession({required this.session});
+  const _ModeCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.isSelected,
+    required this.onTap,
+    required this.theme,
+    this.accentColor,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+  Widget build(BuildContext context) {
+    final color = accentColor ?? theme.colorScheme.tertiary;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withValues(alpha: 0.1)
+              : theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : theme.colorScheme.outlineVariant,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
         child: Column(
           children: [
-            FocusTimer(session: session),
-            const SizedBox(height: 32),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                session.label,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
+            Icon(icon, size: 32, color: isSelected ? color : Colors.grey),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: isSelected ? color : null,
               ),
             ),
-            const SizedBox(height: 40),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      ref.read(focusProvider.notifier).stopSession(),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
-                  ),
-                  icon: const Icon(Icons.stop_rounded),
-                  label: const Text('STOP'),
-                ),
-                const SizedBox(width: 16),
-                FilledButton.icon(
-                  onPressed: () =>
-                      ref.read(focusProvider.notifier).completeSession(),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
-                  ),
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('DONE'),
-                ),
-              ],
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

@@ -7,6 +7,8 @@ class Birthday {
   final String phone;
   final String notes;
   final List<int> reminderDaysBefore;
+  final int reminderHour;
+  final int reminderMinute;
   final DateTime createdAt;
 
   Birthday({
@@ -16,16 +18,14 @@ class Birthday {
     this.phone = '',
     this.notes = '',
     List<int>? reminderDaysBefore,
+    this.reminderHour = 9,
+    this.reminderMinute = 0,
     DateTime? createdAt,
   })  : id = id ?? const Uuid().v4(),
         reminderDaysBefore = reminderDaysBefore ?? const [0],
         createdAt = createdAt ?? DateTime.now();
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-
-
-
-
 
   DateTime nextOccurrence({DateTime? now}) {
     final today = _dateOnly(now ?? DateTime.now());
@@ -60,6 +60,13 @@ class Birthday {
 
   bool isToday({DateTime? now}) => daysUntilNext(now: now) == 0;
 
+  /// Returns the next occurrence as a full DateTime with the configured
+  /// reminder time applied (hour + minute).
+  DateTime nextOccurrenceWithReminderTime({DateTime? now}) {
+    final next = nextOccurrence(now: now);
+    return DateTime(next.year, next.month, next.day, reminderHour, reminderMinute);
+  }
+
   Map<String, dynamic> toMap() => {
         'id': id,
         'name': name,
@@ -67,6 +74,8 @@ class Birthday {
         'phone': phone,
         'notes': notes,
         'reminderDaysBefore': reminderDaysBefore.join(','),
+        'reminderHour': reminderHour,
+        'reminderMinute': reminderMinute,
         'createdAt': createdAt.millisecondsSinceEpoch,
       };
 
@@ -100,6 +109,8 @@ class Birthday {
       phone: map['phone'] ?? '',
       notes: map['notes'] ?? '',
       reminderDaysBefore: days.isEmpty ? const [0] : days,
+      reminderHour: map['reminderHour'] is int ? map['reminderHour'] : 9,
+      reminderMinute: map['reminderMinute'] is int ? map['reminderMinute'] : 0,
       createdAt: map['createdAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'])
           : DateTime.now(),
