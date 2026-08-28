@@ -9,6 +9,23 @@ class FocusChannel {
 
   static final bool _isAndroid = !kIsWeb && Platform.isAndroid;
 
+  static StreamController<String>? _callStateController;
+  static Stream<String>? _callStateStream;
+
+  static Stream<String> get callStateStream {
+    _callStateController ??= StreamController<String>.broadcast();
+    _callStateStream ??= _callStateController!.stream;
+
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onCallStateChanged') {
+        final state = call.arguments as String? ?? '';
+        _callStateController?.add(state);
+      }
+    });
+
+    return _callStateStream!;
+  }
+
   static Future<bool> enterLockTask() async {
     if (!_isAndroid) return false;
     try {
@@ -42,8 +59,6 @@ class FocusChannel {
     }
   }
 
-  /// Enable or disable lock screen flags (show over lock screen, turn screen on).
-  /// Used during strict focus to ensure the focus screen is always visible.
   static Future<bool> setLockScreenFlags(bool enabled) async {
     if (!_isAndroid) return false;
     try {
@@ -54,6 +69,17 @@ class FocusChannel {
       return result ?? false;
     } catch (e) {
       debugPrint('FocusChannel.setLockScreenFlags failed: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> requestPhoneStatePermission() async {
+    if (!_isAndroid) return false;
+    try {
+      final result = await _channel.invokeMethod<bool>('requestPhoneStatePermission');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('FocusChannel.requestPhoneStatePermission failed: $e');
       return false;
     }
   }

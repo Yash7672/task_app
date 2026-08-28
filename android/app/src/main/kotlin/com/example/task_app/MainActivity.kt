@@ -1,10 +1,16 @@
 package com.example.task_app
 
+import android.Manifest
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
 import android.view.WindowManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -16,8 +22,16 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingWidgetTaskId: String? = null
     private var pendingWidgetHabitId: String? = null
 
+    private var phoneStateListener: Any? = null
+    private var telephonyManager: TelephonyManager? = null
+    private var exitedLockTaskForCall = false
+    private var flutterEngineRef: FlutterEngine? = null
+
+    private val PHONE_STATE_PERMISSION_REQUEST = 1001
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngineRef = flutterEngine
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -35,6 +49,9 @@ class MainActivity : FlutterFragmentActivity() {
                         val enabled = call.argument<Boolean>("enabled") ?: false
                         setLockScreenFlags(enabled)
                         result.success(true)
+                    }
+                    "requestPhoneStatePermission" -> {
+                        result.success(requestPhoneStatePermission())
                     }
                     "getWidgetAction" -> {
                         result.success(mapOf(
@@ -62,6 +79,11 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleWidgetIntent(intent)
+    }
+
+    override fun onDestroy() {
+        stopPhoneStateListener()
+        super.onDestroy()
     }
 
     private fun handleWidgetIntent(intent: Intent?) {
@@ -98,8 +120,6 @@ class MainActivity : FlutterFragmentActivity() {
                 startLockTask()
                 isLockTaskActive = true
 
-                // Enable lock screen flags so the activity shows over lock screen
-                // during strict focus. This is a legitimate use case for focus/productivity apps.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     setShowWhenLocked(true)
                     setTurnScreenOn(true)
@@ -111,15 +131,13 @@ class MainActivity : FlutterFragmentActivity() {
                     )
                 }
 
+                startPhoneStateListener()
+
                 true
             } else {
                 false
             }
         } catch (e: SecurityException) {
-            // SecurityException: app is not device owner or profile owner
-            // On standard personal phones, startLockTask() may throw
-            // This is expected — fall back to Flutter-level restrictions
-            // The Flutter side (PopScope, navigation blocking) provides the actual protection.
             false
         } catch (e: Exception) {
             false
@@ -132,7 +150,6 @@ class MainActivity : FlutterFragmentActivity() {
                 stopLockTask()
                 isLockTaskActive = false
 
-                // Clear lock screen flags.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     setShowWhenLocked(false)
                     setTurnScreenOn(false)
@@ -143,6 +160,8 @@ class MainActivity : FlutterFragmentActivity() {
                         WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                     )
                 }
+
+                stopPhoneStateListener()
 
                 true
             } else {
@@ -159,8 +178,6 @@ class MainActivity : FlutterFragmentActivity() {
             val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 val systemReported = activityManager.isInLockTaskMode
-                // Also check our local flag for cases where system reports false
-                // but we know we started lock task (can happen on some OEM ROMs).
                 systemReported || isLockTaskActive
             } else {
                 false
@@ -190,7 +207,159 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             }
         } catch (e: Exception) {
-            // Ignore — flags are best-effort
+        }
+    }
+
+    // ── Phone state listener ──────────────────────────────────────────
+
+    private fun requestPhoneStatePermission(): Boolean {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_PHONE_STATE),
+                PHONE_STATE_PERMISSION_REQUEST
+            )
+            return false
+        }
+        return true
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PHONE_STATE_PERMISSION_REQUEST) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startPhoneStateListener()
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startPhoneStateListener() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        stopPhoneStateListener()
+
+        telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+
+        val listener = object : PhoneStateListener() {
+            @Deprecated("Deprecated in Java")
+            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                handlePhoneCallState(state)
+            }
+        }
+        telephonyManager?.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
+        phoneStateListener = listener
+    }
+
+    private fun stopPhoneStateListener() {
+        @Suppress("DEPRECATION")
+        if (phoneStateListener != null && telephonyManager != null) {
+            telephonyManager?.listen(phoneStateListener as PhoneStateListener, PhoneStateListener.LISTEN_NONE)
+            phoneStateListener = null
+        }
+    }
+
+    private fun handlePhoneCallState(state: Int) {
+        when (state) {
+            TelephonyManager.CALL_STATE_RINGING, TelephonyManager.CALL_STATE_OFFHOOK -> {
+                if (isLockTaskActive && !exitedLockTaskForCall) {
+                    exitedLockTaskForCall = true
+                    temporarilyReleaseLockTask()
+                }
+            }
+            TelephonyManager.CALL_STATE_IDLE -> {
+                if (exitedLockTaskForCall) {
+                    exitedLockTaskForCall = false
+                    reacquireLockTaskIfNeeded()
+                }
+            }
+        }
+    }
+
+    private fun temporarilyReleaseLockTask() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(false)
+                setTurnScreenOn(false)
+            } else {
+                @Suppress("DEPRECATION")
+                window.clearFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            }
+
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    stopLockTask()
+                }
+            } catch (_: Exception) {
+            }
+
+            notifyFlutterCallState("call_active")
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun reacquireLockTaskIfNeeded() {
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val hasActiveFocus = prefs.contains("flutter.focus_start_ms")
+
+            if (!hasActiveFocus) {
+                notifyFlutterCallState("call_ended")
+                return
+            }
+
+            val focusMode = prefs.getString("flutter.focus_mode", "normal")
+            if (focusMode != "strict") {
+                notifyFlutterCallState("call_ended")
+                return
+            }
+
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    startLockTask()
+                    isLockTaskActive = true
+                }
+            } catch (_: SecurityException) {
+                isLockTaskActive = false
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            }
+
+            notifyFlutterCallState("call_ended")
+        } catch (_: Exception) {
+            notifyFlutterCallState("call_ended")
+        }
+    }
+
+    private fun notifyFlutterCallState(state: String) {
+        try {
+            flutterEngineRef?.let { engine ->
+                MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
+                    .invokeMethod("onCallStateChanged", state)
+            }
+        } catch (_: Exception) {
         }
     }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/focus_channel.dart';
 import '../../../models/focus_session_model.dart';
 import '../../../providers/focus_provider.dart';
 import '../widgets/focus_timer.dart';
@@ -19,12 +20,20 @@ class FocusActiveScreen extends ConsumerStatefulWidget {
 class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
     with WidgetsBindingObserver {
   bool _navigatedBack = false;
+  StreamSubscription<String>? _callStateSubscription;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    // Listen for native call state changes to re-enforce strict mode after calls.
+    _callStateSubscription = FocusChannel.callStateStream.listen((state) {
+      if (state == 'call_ended' && mounted) {
+        _enforceStrictMode();
+      }
+    });
 
     // Prevent screenshots/screen recording in strict mode.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -34,6 +43,7 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
 
   @override
   void dispose() {
+    _callStateSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();

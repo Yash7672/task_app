@@ -115,6 +115,10 @@ class FocusService {
     await prefs.setString(_keyMode, mode.name);
 
     if (mode == FocusMode.strict) {
+      // Ensure phone state permission so we can detect calls and
+      // temporarily release Lock Task mode to let Android's normal
+      // call UI handle incoming calls.
+      await FocusChannel.requestPhoneStatePermission();
       // Enter Android Lock Task mode and set lock screen flags.
       await FocusChannel.enterLockTask();
       await FocusChannel.setLockScreenFlags(true);
