@@ -384,7 +384,9 @@ void main() {
       // Completed day carries the fire marker.
       expect(find.text('🔥'), findsOneWidget);
 
-      await tester.tap(find.text('${now.day}'));
+      final dayFinder = find.byWidgetPredicate((w) =>
+          w is Text && w.data == '${now.day}' && w.style?.fontSize == 14);
+      await tester.tap(dayFinder);
       await tester.pumpAndSettle();
 
       expect(
@@ -413,7 +415,9 @@ void main() {
 
       expect(find.text('🔥'), findsNothing);
 
-      await tester.tap(find.text('${now.day}'));
+      final dayFinder = find.byWidgetPredicate((w) =>
+          w is Text && w.data == '${now.day}' && w.style?.fontSize == 14);
+      await tester.tap(dayFinder);
       await tester.pumpAndSettle();
 
       expect(find.text('Habit not completed on this day.'), findsOneWidget);

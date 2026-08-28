@@ -20,6 +20,7 @@ class FocusActiveScreen extends ConsumerStatefulWidget {
 class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
     with WidgetsBindingObserver {
   bool _navigatedBack = false;
+  bool _callActive = false;
   StreamSubscription<String>? _callStateSubscription;
 
   @override
@@ -28,10 +29,13 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    // Listen for native call state changes to re-enforce strict mode after calls.
+    // Listen for native call state changes to manage Lock Task around calls.
     _callStateSubscription = FocusChannel.callStateStream.listen((state) {
-      if (state == 'call_ended' && mounted) {
-        _enforceStrictMode();
+      if (!mounted) return;
+      if (state == 'call_active') {
+        _callActive = true;
+      } else if (state == 'call_ended') {
+        _callActive = false;
       }
     });
 
@@ -52,17 +56,27 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      if (_callActive) {
+        // Call still in progress — don't re-enter immersive mode.
+        return;
+      }
+      final focus = ref.read(focusProvider);
+      if (focus.isStrictActive) {
+        // Reacquire Lock Task if the user is returning to PYLO after a call.
+        FocusChannel.enterLockTask();
+      }
       _enforceStrictMode();
     }
   }
 
   void _enforceStrictMode() {
+    if (_callActive) return;
+
     final focus = ref.read(focusProvider);
     final active = focus.active;
     if (active == null) return;
 
     if (active.mode == FocusMode.strict) {
-      // Re-enter immersive mode and ensure we're the top screen.
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     }
   }

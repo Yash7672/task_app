@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
 import android.view.WindowManager
@@ -25,9 +28,15 @@ class MainActivity : FlutterFragmentActivity() {
     private var phoneStateListener: Any? = null
     private var telephonyManager: TelephonyManager? = null
     private var exitedLockTaskForCall = false
+    private var callActive = false
     private var flutterEngineRef: FlutterEngine? = null
 
     private val PHONE_STATE_PERMISSION_REQUEST = 1001
+
+    // ── VoIP call detection via TelecomManager polling ─────────────────
+    private var voipCheckHandler: Handler? = null
+    private var voipCheckRunnable: Runnable? = null
+    private val VOIP_CHECK_INTERVAL_MS = 1500L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -36,15 +45,9 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "enterLockTask" -> {
-                        result.success(enterLockTask())
-                    }
-                    "exitLockTask" -> {
-                        result.success(exitLockTask())
-                    }
-                    "isLockTaskActive" -> {
-                        result.success(isLockTaskActive())
-                    }
+                    "enterLockTask" -> result.success(enterLockTask())
+                    "exitLockTask" -> result.success(exitLockTask())
+                    "isLockTaskActive" -> result.success(isLockTaskActive())
                     "setLockScreenFlags" -> {
                         val enabled = call.argument<Boolean>("enabled") ?: false
                         setLockScreenFlags(enabled)
@@ -66,13 +69,10 @@ class MainActivity : FlutterFragmentActivity() {
                         pendingWidgetHabitId = null
                         result.success(true)
                     }
-                    else -> {
-                        result.notImplemented()
-                    }
+                    else -> result.notImplemented()
                 }
             }
 
-        // ── Handle widget intent if activity was launched from widget ──
         handleWidgetIntent(intent)
     }
 
@@ -82,6 +82,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onDestroy() {
+        stopVoipCallDetection()
         stopPhoneStateListener()
         super.onDestroy()
     }
@@ -89,7 +90,6 @@ class MainActivity : FlutterFragmentActivity() {
     private fun handleWidgetIntent(intent: Intent?) {
         if (intent == null) return
         val action = intent.action ?: return
-
         when (action) {
             "WIDGET_OPEN_TASK" -> {
                 pendingWidgetAction = "open_task"
@@ -114,6 +114,8 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    // ── Lock Task lifecycle ────────────────────────────────────────────
+
     private fun enterLockTask(): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -132,14 +134,15 @@ class MainActivity : FlutterFragmentActivity() {
                 }
 
                 startPhoneStateListener()
+                startVoipCallDetection()
 
                 true
             } else {
                 false
             }
-        } catch (e: SecurityException) {
+        } catch (_: SecurityException) {
             false
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -161,13 +164,14 @@ class MainActivity : FlutterFragmentActivity() {
                     )
                 }
 
+                stopVoipCallDetection()
                 stopPhoneStateListener()
 
                 true
             } else {
                 false
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             isLockTaskActive = false
             false
         }
@@ -182,7 +186,7 @@ class MainActivity : FlutterFragmentActivity() {
             } else {
                 false
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             isLockTaskActive
         }
     }
@@ -206,11 +210,11 @@ class MainActivity : FlutterFragmentActivity() {
                     )
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
-    // ── Phone state listener ──────────────────────────────────────────
+    // ── Phone state listener (cellular calls) ─────────────────────────
 
     private fun requestPhoneStatePermission(): Boolean {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
@@ -235,6 +239,7 @@ class MainActivity : FlutterFragmentActivity() {
         if (requestCode == PHONE_STATE_PERMISSION_REQUEST) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startPhoneStateListener()
+                startVoipCallDetection()
             }
         }
     }
@@ -274,17 +279,103 @@ class MainActivity : FlutterFragmentActivity() {
             TelephonyManager.CALL_STATE_RINGING, TelephonyManager.CALL_STATE_OFFHOOK -> {
                 if (isLockTaskActive && !exitedLockTaskForCall) {
                     exitedLockTaskForCall = true
+                    callActive = true
                     temporarilyReleaseLockTask()
                 }
             }
             TelephonyManager.CALL_STATE_IDLE -> {
-                if (exitedLockTaskForCall) {
+                if (exitedLockTaskForCall && !isAnyCallActive()) {
                     exitedLockTaskForCall = false
-                    reacquireLockTaskIfNeeded()
+                    callActive = false
+                    notifyFlutterCallState("call_ended")
                 }
             }
         }
     }
+
+    // ── VoIP call detection via TelecomManager polling ─────────────────
+    // WhatsApp and other VoIP apps register calls with Android's Telecom
+    // framework on API 23+. Polling TelecomManager.isInCall() detects
+    // these calls and temporarily releases Lock Task so the system call
+    // UI can appear.
+
+    private fun startVoipCallDetection() {
+        stopVoipCallDetection()
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        voipCheckHandler = Handler(Looper.getMainLooper())
+        voipCheckRunnable = object : Runnable {
+            override fun run() {
+                checkForVoipCall()
+                voipCheckHandler?.postDelayed(this, VOIP_CHECK_INTERVAL_MS)
+            }
+        }
+        voipCheckHandler?.postDelayed(voipCheckRunnable!!, VOIP_CHECK_INTERVAL_MS)
+    }
+
+    private fun stopVoipCallDetection() {
+        voipCheckRunnable?.let { r -> voipCheckHandler?.removeCallbacks(r) }
+        voipCheckRunnable = null
+        voipCheckHandler = null
+    }
+
+    private fun checkForVoipCall() {
+        if (!isLockTaskActive && !exitedLockTaskForCall) return
+
+        try {
+            val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+                ?: return
+
+            @Suppress("DEPRECATION")
+            val isInCall = telecomManager.isInCall
+
+            if (isInCall) {
+                if (!exitedLockTaskForCall) {
+                    exitedLockTaskForCall = true
+                    callActive = true
+                    temporarilyReleaseLockTask()
+                }
+            } else if (exitedLockTaskForCall && !isAnyCallActive()) {
+                exitedLockTaskForCall = false
+                callActive = false
+                notifyFlutterCallState("call_ended")
+            }
+        } catch (_: SecurityException) {
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun isAnyCallActive(): Boolean {
+        try {
+            val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+            if (telecomManager != null) {
+                @Suppress("DEPRECATION")
+                if (telecomManager.isInCall) {
+                    return true
+                }
+            }
+        } catch (_: SecurityException) {
+        } catch (_: Exception) {
+        }
+
+        try {
+            @Suppress("DEPRECATION")
+            val phoneState = telephonyManager?.callState ?: TelephonyManager.CALL_STATE_IDLE
+            if (phoneState != TelephonyManager.CALL_STATE_IDLE) {
+                return true
+            }
+        } catch (_: Exception) {
+        }
+
+        return false
+    }
+
+    // ── Lock Task release ────────────────────────────────────────────
 
     private fun temporarilyReleaseLockTask() {
         try {
@@ -308,48 +399,6 @@ class MainActivity : FlutterFragmentActivity() {
 
             notifyFlutterCallState("call_active")
         } catch (_: Exception) {
-        }
-    }
-
-    private fun reacquireLockTaskIfNeeded() {
-        try {
-            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-            val hasActiveFocus = prefs.contains("flutter.focus_start_ms")
-
-            if (!hasActiveFocus) {
-                notifyFlutterCallState("call_ended")
-                return
-            }
-
-            val focusMode = prefs.getString("flutter.focus_mode", "normal")
-            if (focusMode != "strict") {
-                notifyFlutterCallState("call_ended")
-                return
-            }
-
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    startLockTask()
-                    isLockTaskActive = true
-                }
-            } catch (_: SecurityException) {
-                isLockTaskActive = false
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                setShowWhenLocked(true)
-                setTurnScreenOn(true)
-            } else {
-                @Suppress("DEPRECATION")
-                window.addFlags(
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                )
-            }
-
-            notifyFlutterCallState("call_ended")
-        } catch (_: Exception) {
-            notifyFlutterCallState("call_ended")
         }
     }
 
