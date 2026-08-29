@@ -17,6 +17,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
   @override
   Widget build(BuildContext context) {
     final habitsState = ref.watch(habitsProvider);
+    final sortedHabits = ref.watch(sortedHabitsProvider);
     final summary = ref.watch(streakSummaryProvider);
 
     return Scaffold(
@@ -92,11 +93,6 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
               ),
             );
           }
-
-          final sortedHabits = List<Habit>.from(habits);
-          sortedHabits.sort((a, b) => b
-              .effectiveCurrentStreak()
-              .compareTo(a.effectiveCurrentStreak()));
 
           return CustomScrollView(
             slivers: [

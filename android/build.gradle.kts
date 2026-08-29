@@ -34,6 +34,21 @@ subprojects {
     }
 }
 
+subprojects {
+    project.plugins.withId("com.android.library") {
+        project.afterEvaluate {
+            val android = project.extensions.findByName("android")
+            if (android != null) {
+                val ns = android::class.java.getMethod("getNamespace").invoke(android) as? String
+                if (ns.isNullOrEmpty()) {
+                    android::class.java.getMethod("setNamespace", String::class.java)
+                        .invoke(android, "com.example.${project.name}")
+                }
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

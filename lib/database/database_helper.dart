@@ -236,15 +236,19 @@ class DatabaseHelper {
         'CREATE INDEX IF NOT EXISTS idx_tasks_filter_sort ON tasks(isDeleted, isArchived, dueDate)',
         'CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)',
         'CREATE INDEX IF NOT EXISTS idx_tasks_conflict ON tasks(isDeleted, isArchived, startTime, endTime)',
+        'CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(isCompleted)',
+        'CREATE INDEX IF NOT EXISTS idx_tasks_favorite ON tasks(isFavorite)',
       ],
       'habit_logs': [
         'CREATE INDEX IF NOT EXISTS idx_habit_logs_habitId ON habit_logs(habitId)',
+        'CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(date)',
       ],
       'checklist_items': [
         'CREATE INDEX IF NOT EXISTS idx_checklist_items_checklistId ON checklist_items(checklistId)',
       ],
       'focus_sessions': [
         'CREATE INDEX IF NOT EXISTS idx_focus_sessions_start ON focus_sessions(startTime)',
+        'CREATE INDEX IF NOT EXISTS idx_focus_sessions_completed ON focus_sessions(completed)',
       ],
     };
 

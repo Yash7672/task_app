@@ -281,36 +281,34 @@ final allTasksProvider = Provider<List<Task>>((ref) {
 final todayTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+  final todayMs = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+  final endOfDayMs = DateTime(now.year, now.month, now.day, 23, 59, 59)
+      .millisecondsSinceEpoch;
 
   return tasks.where((task) {
-    final taskDate =
-        DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    return taskDate.isAtSameMomentAs(today);
+    final dueMs = task.dueDate.millisecondsSinceEpoch;
+    return dueMs >= todayMs && dueMs <= endOfDayMs;
   }).toList();
 });
 
 final upcomingTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+  final endOfTodayMs = DateTime(now.year, now.month, now.day, 23, 59, 59)
+      .millisecondsSinceEpoch;
 
   return tasks.where((task) {
-    final taskDate =
-        DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    return taskDate.isAfter(today);
+    return task.dueDate.millisecondsSinceEpoch > endOfTodayMs;
   }).toList();
 });
 
 final overdueTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+  final todayMs = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
 
   return tasks.where((task) {
-    final taskDate =
-        DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    return taskDate.isBefore(today) && !task.isCompleted;
+    return task.dueDate.millisecondsSinceEpoch < todayMs && !task.isCompleted;
   }).toList();
 });
 
@@ -531,6 +529,19 @@ final habitsProvider =
     StateNotifierProvider<HabitNotifier, AsyncValue<List<Habit>>>((ref) {
   final dbHelper = ref.watch(databaseProvider);
   return HabitNotifier(dbHelper);
+});
+
+/// Sorted habits for display (by effective streak descending).
+final sortedHabitsProvider = Provider<List<Habit>>((ref) {
+  final habitsState = ref.watch(habitsProvider);
+  final habits = habitsState.maybeWhen(
+    data: (items) => items,
+    orElse: () => <Habit>[],
+  );
+  final sorted = List<Habit>.from(habits);
+  sorted.sort((a, b) =>
+      b.effectiveCurrentStreak().compareTo(a.effectiveCurrentStreak()));
+  return sorted;
 });
 
 final overallStatsProvider = Provider<Map<String, dynamic>>((ref) {

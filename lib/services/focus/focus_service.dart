@@ -44,18 +44,25 @@ class FocusService {
   static const _keyMode = 'focus_mode';
   static const _keyStrictPref = 'focus_strict_mode_pref';
 
+  SharedPreferences? _cachedPrefs;
+
+  Future<SharedPreferences> _getPrefs() async {
+    _cachedPrefs ??= await SharedPreferences.getInstance();
+    return _cachedPrefs!;
+  }
+
   Future<bool> isStrictMode() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getBool(_keyStrictPref) ?? false;
   }
 
   Future<void> setStrictMode(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setBool(_keyStrictPref, value);
   }
 
   Future<ActiveFocus?> loadActiveSession() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final label = prefs.getString(_keyLabel);
     final startMs = prefs.getInt(_keyStartMs);
     final endMs = prefs.getInt(_keyEndMs);
@@ -102,7 +109,7 @@ class FocusService {
       mode: mode,
     );
 
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setString(_keyLabel, session.label);
     if (taskId != null) {
       await prefs.setString(_keyTaskId, taskId);
@@ -115,11 +122,7 @@ class FocusService {
     await prefs.setString(_keyMode, mode.name);
 
     if (mode == FocusMode.strict) {
-      // Ensure phone state permission so we can detect calls and
-      // temporarily release Lock Task mode to let Android's normal
-      // call UI handle incoming calls.
       await FocusChannel.requestPhoneStatePermission();
-      // Enter Android Lock Task mode and set lock screen flags.
       await FocusChannel.enterLockTask();
       await FocusChannel.setLockScreenFlags(true);
     }
@@ -163,8 +166,7 @@ class FocusService {
           mode: session.mode,
         ),
       );
-      // Only clear prefs after successful DB write to prevent data loss.
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       await prefs.remove(_keyLabel);
       await prefs.remove(_keyTaskId);
       await prefs.remove(_keyStartMs);

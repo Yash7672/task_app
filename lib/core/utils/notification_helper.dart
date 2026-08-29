@@ -176,9 +176,12 @@ class NotificationHelper {
     }
     const maxReminders = 12;
     try {
+      // Cancel all task reminder IDs concurrently
+      final cancelFutures = <Future<void>>[];
       for (int i = 0; i < maxReminders; i++) {
-        await _notifications.cancel(taskId.hashCode + i);
+        cancelFutures.add(_notifications.cancel(taskId.hashCode + i));
       }
+      await Future.wait(cancelFutures);
     } catch (e) {
       debugPrint('Failed to cancel notifications for task $taskId: $e');
     }
@@ -267,15 +270,18 @@ class NotificationHelper {
     if (kIsWeb) {
       return;
     }
+    // Batch cancel: cancel current year IDs and legacy year IDs concurrently
+    final cancelFutures = <Future<void>>[];
     for (final days in [0, 1, 3, 7]) {
-      await _notifications.cancel('$birthdayId-$days'.hashCode);
+      cancelFutures.add(_notifications.cancel('$birthdayId-$days'.hashCode));
       // Legacy ids (older builds) included a birth-year suffix.
-      for (var year = DateTime.now().year - 2;
-          year <= DateTime.now().year + 2;
-          year++) {
-        await _notifications.cancel('$birthdayId-$days-$year'.hashCode);
+      final now = DateTime.now();
+      for (var year = now.year - 2; year <= now.year + 2; year++) {
+        cancelFutures.add(
+            _notifications.cancel('$birthdayId-$days-$year'.hashCode));
       }
     }
+    await Future.wait(cancelFutures);
   }
 
   static Future<void> showFocusOngoing({

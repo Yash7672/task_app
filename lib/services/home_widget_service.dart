@@ -178,91 +178,93 @@ class HomeWidgetService {
 
   // ── Core data push to SharedPreferences ────────────────────────────
 
+  static bool _focusDefaultsSet = false;
+
   static Future<void> _flush() async {
     try {
       await init();
 
       // ── Today Tasks widget data ──
-      // Show pending tasks first (actionable), then completed
       final pendingTasks = _todayTasks.where((t) => !t.isCompleted).toList();
       final completedTasks = _todayTasks.where((t) => t.isCompleted).toList();
       final allDisplayTasks = [...pendingTasks, ...completedTasks];
       final totalToday = _todayTasks.length;
       final doneCount = completedTasks.length;
       final pendingCount = pendingTasks.length;
+      final now = DateTime.now().millisecondsSinceEpoch;
 
-      await HomeWidget.saveWidgetData<int>('tasks_total', totalToday);
-      await HomeWidget.saveWidgetData<int>('tasks_done', doneCount);
-      await HomeWidget.saveWidgetData<int>('tasks_pending', pendingCount);
+      // Batch task writes concurrently
+      final taskFutures = <Future<void>>[
+        HomeWidget.saveWidgetData<int>('tasks_total', totalToday),
+        HomeWidget.saveWidgetData<int>('tasks_done', doneCount),
+        HomeWidget.saveWidgetData<int>('tasks_pending', pendingCount),
+        HomeWidget.saveWidgetData<int>(
+            'tasks_more', allDisplayTasks.length > 5 ? allDisplayTasks.length - 5 : 0),
+        HomeWidget.saveWidgetData<int>('best_streak', _bestStreak),
+        HomeWidget.saveWidgetData<String>('tasks_last_updated', now.toString()),
+      ];
 
       for (var i = 0; i < 5; i++) {
         if (i < allDisplayTasks.length) {
           final t = allDisplayTasks[i];
-          await HomeWidget.saveWidgetData<String>('tasks_title_$i', t.title);
-          await HomeWidget.saveWidgetData<String>('tasks_id_$i', t.id);
-          await HomeWidget.saveWidgetData<bool>('tasks_done_$i', t.isCompleted);
+          taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', t.title));
+          taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', t.id));
+          taskFutures.add(HomeWidget.saveWidgetData<bool>('tasks_done_$i', t.isCompleted));
         } else {
-          await HomeWidget.saveWidgetData<String>('tasks_title_$i', '');
-          await HomeWidget.saveWidgetData<String>('tasks_id_$i', '');
+          taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', ''));
+          taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', ''));
         }
       }
 
-      if (allDisplayTasks.length > 5) {
-        await HomeWidget.saveWidgetData<int>('tasks_more', allDisplayTasks.length - 5);
-      } else {
-        await HomeWidget.saveWidgetData<int>('tasks_more', 0);
-      }
-
-      await HomeWidget.saveWidgetData<int>('best_streak', _bestStreak);
-      await HomeWidget.saveWidgetData<String>(
-          'tasks_last_updated', DateTime.now().millisecondsSinceEpoch.toString());
-
       // ── Habits widget data ──
       final habitsCompletedToday = _habits.where((h) => h.isCompletedToday).length;
-      await HomeWidget.saveWidgetData<int>('habits_best_streak', _bestStreak);
-      await HomeWidget.saveWidgetData<int>('habits_count', _habits.length);
-      await HomeWidget.saveWidgetData<int>('habits_completed_today', habitsCompletedToday);
+      taskFutures.addAll([
+        HomeWidget.saveWidgetData<int>('habits_best_streak', _bestStreak),
+        HomeWidget.saveWidgetData<int>('habits_count', _habits.length),
+        HomeWidget.saveWidgetData<int>('habits_completed_today', habitsCompletedToday),
+        HomeWidget.saveWidgetData<String>('habits_last_updated', now.toString()),
+      ]);
 
       for (var i = 0; i < 5; i++) {
         if (i < _habits.length) {
           final h = _habits[i];
-          await HomeWidget.saveWidgetData<String>('habits_name_$i', h.name);
-          await HomeWidget.saveWidgetData<String>('habits_id_$i', h.id);
-          await HomeWidget.saveWidgetData<int>(
-              'habits_streak_$i', h.effectiveCurrentStreak());
-          await HomeWidget.saveWidgetData<bool>('habits_done_$i', h.isCompletedToday);
+          taskFutures.add(HomeWidget.saveWidgetData<String>('habits_name_$i', h.name));
+          taskFutures.add(HomeWidget.saveWidgetData<String>('habits_id_$i', h.id));
+          taskFutures.add(HomeWidget.saveWidgetData<int>(
+              'habits_streak_$i', h.effectiveCurrentStreak()));
+          taskFutures.add(HomeWidget.saveWidgetData<bool>('habits_done_$i', h.isCompletedToday));
         } else {
-          await HomeWidget.saveWidgetData<String>('habits_name_$i', '');
-          await HomeWidget.saveWidgetData<String>('habits_id_$i', '');
+          taskFutures.add(HomeWidget.saveWidgetData<String>('habits_name_$i', ''));
+          taskFutures.add(HomeWidget.saveWidgetData<String>('habits_id_$i', ''));
         }
       }
 
-      await HomeWidget.saveWidgetData<String>(
-          'habits_last_updated', DateTime.now().millisecondsSinceEpoch.toString());
-
       // ── Progress widget data ──
       final percent = totalToday > 0 ? ((doneCount / totalToday) * 100).round() : 0;
-      await HomeWidget.saveWidgetData<int>('progress_total', totalToday);
-      await HomeWidget.saveWidgetData<int>('progress_done', doneCount);
-      await HomeWidget.saveWidgetData<int>('progress_percent', percent);
-      await HomeWidget.saveWidgetData<int>('progress_remaining', pendingCount);
-      await HomeWidget.saveWidgetData<String>(
-          'progress_last_updated', DateTime.now().millisecondsSinceEpoch.toString());
+      taskFutures.addAll([
+        HomeWidget.saveWidgetData<int>('progress_total', totalToday),
+        HomeWidget.saveWidgetData<int>('progress_done', doneCount),
+        HomeWidget.saveWidgetData<int>('progress_percent', percent),
+        HomeWidget.saveWidgetData<int>('progress_remaining', pendingCount),
+        HomeWidget.saveWidgetData<String>('progress_last_updated', now.toString()),
+      ]);
 
-      // ── Update all widget types ──
-      // Also ensure focus/checklist/birthday widgets have default data
-      // so they can inflate their initial layout without crash
-      final existingFocusActive = await HomeWidget.getWidgetData<bool>('focus_active');
-      if (existingFocusActive == null) {
-        await HomeWidget.saveWidgetData<bool>('focus_active', false);
-        await HomeWidget.saveWidgetData<String>('focus_label', '');
-        await HomeWidget.saveWidgetData<int>('focus_remaining_minutes', 0);
-        await HomeWidget.saveWidgetData<int>('focus_remaining_seconds', 0);
-        await HomeWidget.saveWidgetData<bool>('focus_strict', false);
+      await Future.wait(taskFutures);
+
+      // ── Default data for focus widget (once only) ──
+      if (!_focusDefaultsSet) {
+        final existingFocusActive = await HomeWidget.getWidgetData<bool>('focus_active');
+        if (existingFocusActive == null) {
+          await Future.wait([
+            HomeWidget.saveWidgetData<bool>('focus_active', false),
+            HomeWidget.saveWidgetData<String>('focus_label', ''),
+            HomeWidget.saveWidgetData<int>('focus_remaining_minutes', 0),
+            HomeWidget.saveWidgetData<int>('focus_remaining_seconds', 0),
+            HomeWidget.saveWidgetData<bool>('focus_strict', false),
+          ]);
+        }
+        _focusDefaultsSet = true;
       }
-      await HomeWidget.saveWidgetData<String>('checklist_title', '');
-      await HomeWidget.saveWidgetData<int>('checklist_count', 0);
-      await HomeWidget.saveWidgetData<int>('birthdays_count', 0);
 
       await _updateAllWidgets();
     } catch (e) {
@@ -282,13 +284,15 @@ class HomeWidgetService {
     if (kIsWeb) return;
     try {
       await init();
-      await HomeWidget.saveWidgetData<bool>('focus_active', isActive);
-      await HomeWidget.saveWidgetData<String>('focus_label', label);
-      await HomeWidget.saveWidgetData<int>('focus_remaining_minutes', remainingMinutes);
-      await HomeWidget.saveWidgetData<int>('focus_remaining_seconds', remainingSeconds);
-      await HomeWidget.saveWidgetData<bool>('focus_strict', isStrict);
-      await HomeWidget.saveWidgetData<String>(
-          'focus_last_updated', DateTime.now().millisecondsSinceEpoch.toString());
+      await Future.wait([
+        HomeWidget.saveWidgetData<bool>('focus_active', isActive),
+        HomeWidget.saveWidgetData<String>('focus_label', label),
+        HomeWidget.saveWidgetData<int>('focus_remaining_minutes', remainingMinutes),
+        HomeWidget.saveWidgetData<int>('focus_remaining_seconds', remainingSeconds),
+        HomeWidget.saveWidgetData<bool>('focus_strict', isStrict),
+        HomeWidget.saveWidgetData<String>(
+            'focus_last_updated', DateTime.now().millisecondsSinceEpoch.toString()),
+      ]);
       await HomeWidget.updateWidget(
         androidName: 'PyloFocusWidgetProvider',
         qualifiedAndroidName: _focusProviderName,
@@ -307,20 +311,23 @@ class HomeWidgetService {
     if (kIsWeb) return;
     try {
       await init();
-      await HomeWidget.saveWidgetData<String>('checklist_title', title);
-      await HomeWidget.saveWidgetData<int>('checklist_count', items.length);
+      final futures = <Future<void>>[
+        HomeWidget.saveWidgetData<String>('checklist_title', title),
+        HomeWidget.saveWidgetData<int>('checklist_count', items.length),
+      ];
 
       for (var i = 0; i < 5; i++) {
         if (i < items.length) {
-          await HomeWidget.saveWidgetData<String>('checklist_text_$i', items[i].text);
-          await HomeWidget.saveWidgetData<bool>('checklist_done_$i', items[i].completed);
+          futures.add(HomeWidget.saveWidgetData<String>('checklist_text_$i', items[i].text));
+          futures.add(HomeWidget.saveWidgetData<bool>('checklist_done_$i', items[i].completed));
         } else {
-          await HomeWidget.saveWidgetData<String>('checklist_text_$i', '');
+          futures.add(HomeWidget.saveWidgetData<String>('checklist_text_$i', ''));
         }
       }
 
-      await HomeWidget.saveWidgetData<String>(
-          'checklist_last_updated', DateTime.now().millisecondsSinceEpoch.toString());
+      futures.add(HomeWidget.saveWidgetData<String>(
+          'checklist_last_updated', DateTime.now().millisecondsSinceEpoch.toString()));
+      await Future.wait(futures);
       await HomeWidget.updateWidget(
         androidName: 'PyloChecklistWidgetProvider',
         qualifiedAndroidName: _checklistProviderName,
@@ -342,7 +349,9 @@ class HomeWidgetService {
           .toList()
         ..sort((a, b) => a.daysUntilNext(now: now).compareTo(b.daysUntilNext(now: now)));
 
-      await HomeWidget.saveWidgetData<int>('birthdays_count', upcoming.length);
+      final futures = <Future<void>>[
+        HomeWidget.saveWidgetData<int>('birthdays_count', upcoming.length),
+      ];
 
       for (var i = 0; i < 3; i++) {
         if (i < upcoming.length) {
@@ -353,16 +362,17 @@ class HomeWidgetService {
               : days == 1
                   ? 'Tomorrow'
                   : '${b.nextOccurrence(now: now).day} ${_monthName(b.nextOccurrence(now: now).month)}';
-          await HomeWidget.saveWidgetData<String>('birthday_name_$i', b.name);
-          await HomeWidget.saveWidgetData<String>('birthday_when_$i', whenText);
+          futures.add(HomeWidget.saveWidgetData<String>('birthday_name_$i', b.name));
+          futures.add(HomeWidget.saveWidgetData<String>('birthday_when_$i', whenText));
         } else {
-          await HomeWidget.saveWidgetData<String>('birthday_name_$i', '');
-          await HomeWidget.saveWidgetData<String>('birthday_when_$i', '');
+          futures.add(HomeWidget.saveWidgetData<String>('birthday_name_$i', ''));
+          futures.add(HomeWidget.saveWidgetData<String>('birthday_when_$i', ''));
         }
       }
 
-      await HomeWidget.saveWidgetData<String>(
-          'birthdays_last_updated', DateTime.now().millisecondsSinceEpoch.toString());
+      futures.add(HomeWidget.saveWidgetData<String>(
+          'birthdays_last_updated', DateTime.now().millisecondsSinceEpoch.toString()));
+      await Future.wait(futures);
       await HomeWidget.updateWidget(
         androidName: 'PyloBirthdaysWidgetProvider',
         qualifiedAndroidName: _birthdaysProviderName,
@@ -432,8 +442,10 @@ class HomeWidgetService {
     if (kIsWeb) return;
     try {
       await init();
-      await HomeWidget.saveWidgetData<String>('widget_action', '');
-      await HomeWidget.saveWidgetData<String>('widget_task_id', '');
+      await Future.wait([
+        HomeWidget.saveWidgetData<String>('widget_action', ''),
+        HomeWidget.saveWidgetData<String>('widget_task_id', ''),
+      ]);
     } catch (e) {
       debugPrint('HomeWidget clearWidgetAction failed: $e');
     }

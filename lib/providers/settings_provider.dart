@@ -11,6 +11,12 @@ class SettingsController extends StateNotifier<AppThemeMode> {
   }
 
   Completer<void>? _loading;
+  SharedPreferences? _cachedPrefs;
+
+  Future<SharedPreferences> _getPrefs() async {
+    _cachedPrefs ??= await SharedPreferences.getInstance();
+    return _cachedPrefs!;
+  }
 
   Future<void> ensureLoaded() {
     if (_loading != null) return _loading!.future;
@@ -21,7 +27,7 @@ class SettingsController extends StateNotifier<AppThemeMode> {
     final completer = Completer<void>();
     _loading = completer;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       final stored = prefs.getString('theme_mode');
       if (stored == 'dark') {
         state = AppThemeMode.dark;
@@ -39,7 +45,7 @@ class SettingsController extends StateNotifier<AppThemeMode> {
   }
 
   Future<void> setTheme(AppThemeMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     state = mode;
     await prefs.setString('theme_mode', mode.name);
   }

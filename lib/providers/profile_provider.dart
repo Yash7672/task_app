@@ -8,8 +8,15 @@ class ProfileNotifier extends StateNotifier<Profile> {
     _loadProfile();
   }
 
+  SharedPreferences? _cachedPrefs;
+
+  Future<SharedPreferences> _getPrefs() async {
+    _cachedPrefs ??= await SharedPreferences.getInstance();
+    return _cachedPrefs!;
+  }
+
   Future<void> _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final profile = Profile(
       name: prefs.getString('profile_name') ?? state.name,
       email: prefs.getString('profile_email') ?? state.email,
@@ -21,17 +28,19 @@ class ProfileNotifier extends StateNotifier<Profile> {
   }
 
   Future<void> updateProfile(Profile profile) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     try {
-      await prefs.setString('profile_name', profile.name);
-      await prefs.setString('profile_email', profile.email);
-      await prefs.setString('profile_phone', profile.phone);
-      await prefs.setString('profile_bio', profile.bio);
-      if (profile.imagePath != null) {
-        await prefs.setString('profile_image_path', profile.imagePath!);
-      } else {
-        await prefs.remove('profile_image_path');
-      }
+      // Batch all preference writes
+      await Future.wait([
+        prefs.setString('profile_name', profile.name),
+        prefs.setString('profile_email', profile.email),
+        prefs.setString('profile_phone', profile.phone),
+        prefs.setString('profile_bio', profile.bio),
+        if (profile.imagePath != null)
+          prefs.setString('profile_image_path', profile.imagePath!)
+        else
+          prefs.remove('profile_image_path'),
+      ]);
       state = profile;
     } catch (e) {
       debugPrint('Error updating profile: $e');

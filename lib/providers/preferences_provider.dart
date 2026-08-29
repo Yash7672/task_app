@@ -45,8 +45,15 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
     _loadPreferences();
   }
 
+  SharedPreferences? _cachedPrefs;
+
+  Future<SharedPreferences> _getPrefs() async {
+    _cachedPrefs ??= await SharedPreferences.getInstance();
+    return _cachedPrefs!;
+  }
+
   Future<void> _loadPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final reminderStr = prefs.getString('reminder_minutes');
     List<int> loadedReminders = [5, 10];
     if (reminderStr != null && reminderStr.isNotEmpty) {
@@ -75,31 +82,31 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
   }
 
   Future<void> setNotificationsEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     state = state.copyWith(notificationsEnabled: enabled);
     await prefs.setBool('notifications_enabled', enabled);
   }
 
   Future<void> setBirthdayRemindersEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     state = state.copyWith(birthdayRemindersEnabled: enabled);
     await prefs.setBool('birthday_reminders_enabled', enabled);
   }
 
   Future<void> setReminderMinutes(List<int> minutes) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     state = state.copyWith(reminderMinutes: minutes);
     await prefs.setString('reminder_minutes', jsonEncode(minutes));
   }
 
   Future<void> setDailyReminderEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     state = state.copyWith(dailyReminderEnabled: enabled);
     await prefs.setBool('daily_reminder_enabled', enabled);
   }
 
   Future<void> setDailyReminderTime(int hour, int minute) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     state = state.copyWith(
       dailyReminderHour: hour,
       dailyReminderMinute: minute,
