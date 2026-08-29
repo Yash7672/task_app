@@ -26,9 +26,6 @@ class WidgetActionHandler {
       // Clear the action so it doesn't fire again
       await _channel.invokeMethod('clearWidgetAction');
 
-      // Wait for the first frame to render before navigating
-      await Future.delayed(const Duration(milliseconds: 500));
-
       if (!context.mounted) return;
 
       switch (action) {

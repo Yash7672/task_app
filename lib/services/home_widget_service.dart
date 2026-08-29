@@ -8,6 +8,12 @@ import '../models/checklist_model.dart';
 import '../models/habit_model.dart';
 import '../models/task_model.dart';
 
+class _ChecklistRow {
+  final String text;
+  final bool isGroup;
+  const _ChecklistRow({required this.text, required this.isGroup});
+}
+
 class HomeWidgetService {
   static const _androidProviderName =
       'com.example.task_app.PyloHomeWidgetProvider';
@@ -209,7 +215,6 @@ class HomeWidgetService {
           final t = allDisplayTasks[i];
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', t.title));
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', t.id));
-          taskFutures.add(HomeWidget.saveWidgetData<bool>('tasks_done_$i', t.isCompleted));
         } else {
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', ''));
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', ''));
@@ -232,7 +237,6 @@ class HomeWidgetService {
           taskFutures.add(HomeWidget.saveWidgetData<String>('habits_id_$i', h.id));
           taskFutures.add(HomeWidget.saveWidgetData<int>(
               'habits_streak_$i', h.effectiveCurrentStreak()));
-          taskFutures.add(HomeWidget.saveWidgetData<bool>('habits_done_$i', h.isCompletedToday));
         } else {
           taskFutures.add(HomeWidget.saveWidgetData<String>('habits_name_$i', ''));
           taskFutures.add(HomeWidget.saveWidgetData<String>('habits_id_$i', ''));
@@ -302,24 +306,34 @@ class HomeWidgetService {
     }
   }
 
-  // ── Checklist widget data ─────────────────────────────────────────
+  // ── Checklist widget data (hierarchical) ──────────────────────────
 
   static Future<void> refreshChecklist({
-    required String title,
-    required List<ChecklistItem> items,
+    required List<Checklist> checklists,
+    required Map<String, List<ChecklistItem>> items,
   }) async {
     if (kIsWeb) return;
     try {
       await init();
+
+      // Flatten into rows: group headers + their items
+      final rows = <_ChecklistRow>[];
+      for (final checklist in checklists) {
+        final checklistItems = items[checklist.id] ?? const [];
+        rows.add(_ChecklistRow(text: checklist.title, isGroup: true));
+        for (final item in checklistItems) {
+          rows.add(_ChecklistRow(text: item.text, isGroup: false));
+        }
+      }
+
       final futures = <Future<void>>[
-        HomeWidget.saveWidgetData<String>('checklist_title', title),
-        HomeWidget.saveWidgetData<int>('checklist_count', items.length),
+        HomeWidget.saveWidgetData<int>('checklist_count', rows.length),
       ];
 
-      for (var i = 0; i < 5; i++) {
-        if (i < items.length) {
-          futures.add(HomeWidget.saveWidgetData<String>('checklist_text_$i', items[i].text));
-          futures.add(HomeWidget.saveWidgetData<bool>('checklist_done_$i', items[i].completed));
+      for (var i = 0; i < 8; i++) {
+        if (i < rows.length) {
+          futures.add(HomeWidget.saveWidgetData<String>('checklist_text_$i', rows[i].text));
+          futures.add(HomeWidget.saveWidgetData<bool>('checklist_is_group_$i', rows[i].isGroup));
         } else {
           futures.add(HomeWidget.saveWidgetData<String>('checklist_text_$i', ''));
         }

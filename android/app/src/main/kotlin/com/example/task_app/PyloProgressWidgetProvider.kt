@@ -1,6 +1,5 @@
 package com.example.task_app
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
@@ -8,7 +7,6 @@ import android.content.SharedPreferences
 import android.view.View
 import android.widget.RemoteViews
 import androidx.annotation.Keep
-import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 
 @Keep
@@ -22,16 +20,16 @@ class PyloProgressWidgetProvider : HomeWidgetProvider() {
     ) {
         appWidgetIds.forEach { widgetId ->
             val views = RemoteViews(context.packageName, R.layout.pylo_progress_widget).apply {
-                // ── Root tap: open PYLO dashboard ──
+                // Root tap: open PYLO Tasks page
                 val intent = Intent(context, MainActivity::class.java).apply {
-                    action = "WIDGET_OPEN_DASHBOARD"
+                    action = "WIDGET_OPEN_TASK"
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
-                val pendingIntent = PendingIntent.getActivity(
+                val pendingIntent = android.app.PendingIntent.getActivity(
                     context,
                     widgetId,
                     intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
                 )
                 setOnClickPendingIntent(R.id.widget_root, pendingIntent)
 
@@ -46,8 +44,8 @@ class PyloProgressWidgetProvider : HomeWidgetProvider() {
                     setViewVisibility(R.id.widget_percent, View.VISIBLE)
                     setViewVisibility(R.id.widget_remaining, View.VISIBLE)
 
-                    setTextViewText(R.id.widget_counts, "$done / $total")
-                    setTextViewText(R.id.widget_percent, "$percent%")
+                    setTextViewText(R.id.widget_counts, "Today's Progress")
+                    setTextViewText(R.id.widget_percent, "$done / $total  \u2022  $percent%")
 
                     val remainingText = if (remaining == 1) {
                         "1 task remaining"

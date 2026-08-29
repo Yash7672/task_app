@@ -11,7 +11,7 @@
         android:id="@+id/widget_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="\uD83D\uDED2 CHECKLIST"
+        android:text="Checklist"
         android:textColor="@color/widget_header_color"
         android:textSize="14sp"
         android:textStyle="bold" />
@@ -32,7 +32,7 @@
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
         android:textSize="13sp"
-        android:paddingTop="4dp"
+        android:paddingTop="3dp"
         android:maxLines="1"
         android:ellipsize="end" />
 
@@ -42,7 +42,7 @@
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
         android:textSize="13sp"
-        android:paddingTop="4dp"
+        android:paddingTop="3dp"
         android:maxLines="1"
         android:ellipsize="end" />
 
@@ -52,7 +52,7 @@
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
         android:textSize="13sp"
-        android:paddingTop="4dp"
+        android:paddingTop="3dp"
         android:maxLines="1"
         android:ellipsize="end" />
 
@@ -62,7 +62,37 @@
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
         android:textSize="13sp"
-        android:paddingTop="4dp"
+        android:paddingTop="3dp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_item_5"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_task_color"
+        android:textSize="13sp"
+        android:paddingTop="3dp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_item_6"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_task_color"
+        android:textSize="13sp"
+        android:paddingTop="3dp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_item_7"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_task_color"
+        android:textSize="13sp"
+        android:paddingTop="3dp"
         android:maxLines="1"
         android:ellipsize="end" />
 

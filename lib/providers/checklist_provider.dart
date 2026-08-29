@@ -35,14 +35,10 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
   }
 
   void _updateChecklistWidget() {
-    // Push the first checklist's data to the widget
-    if (state.checklists.isNotEmpty) {
-      final first = state.checklists.first;
-      final items = state.items[first.id] ?? const [];
-      HomeWidgetService.refreshChecklist(title: first.title, items: items);
-    } else {
-      HomeWidgetService.refreshChecklist(title: '', items: []);
-    }
+    HomeWidgetService.refreshChecklist(
+      checklists: state.checklists,
+      items: state.items,
+    );
   }
 
   Future<void> loadChecklists() async {
@@ -50,6 +46,7 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
       final checklists = await dbHelper.getAllChecklists();
       final items = await dbHelper.getAllChecklistItems();
       state = ChecklistsState(checklists: checklists, items: items);
+      _updateChecklistWidget();
     } catch (e) {
       debugPrint('Error loading checklists: $e');
     }
