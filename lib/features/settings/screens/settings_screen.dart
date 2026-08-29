@@ -305,6 +305,45 @@ class SettingsScreen extends ConsumerWidget {
                   },
                 ),
                 ListTile(
+                  title: const Text('Add "Focus" widget'),
+                  subtitle:
+                      const Text('Shows focus timer status'),
+                  leading: const Icon(Icons.timer_outlined),
+                  onTap: () async {
+                    await HomeWidgetService.requestPinFocusWidget();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'If nothing appeared, add it from your launcher\'s widget menu.')));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Add "Checklist" widget'),
+                  subtitle:
+                      const Text('Shows your quick checklist'),
+                  leading: const Icon(Icons.checklist_outlined),
+                  onTap: () async {
+                    await HomeWidgetService.requestPinChecklistWidget();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'If nothing appeared, add it from your launcher\'s widget menu.')));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Add "Birthdays" widget'),
+                  subtitle:
+                      const Text('Shows upcoming birthdays'),
+                  leading: const Icon(Icons.cake_outlined),
+                  onTap: () async {
+                    await HomeWidgetService.requestPinBirthdaysWidget();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'If nothing appeared, add it from your launcher\'s widget menu.')));
+                  },
+                ),
+                ListTile(
                   title: const Text('Export Backup'),
                   subtitle: const Text('Save a .pylobackup file anywhere you choose'),
                   leading: const Icon(Icons.backup_outlined),

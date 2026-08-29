@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="110dp"
+    android:minWidth="180dp"
     android:minHeight="110dp"
-    android:targetCellWidth="2"
+    android:targetCellWidth="3"
     android:targetCellHeight="2"
     android:updatePeriodMillis="1800000"
-    android:initialLayout="@layout/pylo_progress_widget"
+    android:initialLayout="@layout/pylo_birthdays_widget"
     android:previewImage="@drawable/pylo_widget_preview"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
-    android:description="@string/pylo_progress_widget_description" />
+    android:description="@string/pylo_birthdays_widget_description" />

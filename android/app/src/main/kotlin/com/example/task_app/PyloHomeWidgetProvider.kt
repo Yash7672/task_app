@@ -8,9 +8,11 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
+import androidx.annotation.Keep
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 
+@Keep
 class PyloHomeWidgetProvider : HomeWidgetProvider() {
 
     override fun onUpdate(
@@ -62,11 +64,13 @@ class PyloHomeWidgetProvider : HomeWidgetProvider() {
                 for ((index, taskViewId) in taskViews.withIndex()) {
                     val title = widgetData.getString("tasks_title_$index", null)
                     val taskId = widgetData.getString("tasks_id_$index", null)
+                    val done = widgetData.getBoolean("tasks_done_$index", false)
                     if (title.isNullOrEmpty()) {
                         setViewVisibility(taskViewId, View.GONE)
                     } else {
                         setViewVisibility(taskViewId, View.VISIBLE)
-                        setTextViewText(taskViewId, "\u25EF $title")
+                        val icon = if (done) "\u2713" else "\u25EF"
+                        setTextViewText(taskViewId, "$icon $title")
                         visibleCount++
 
                         // ── Per-task tap: open PYLO with task ID ──

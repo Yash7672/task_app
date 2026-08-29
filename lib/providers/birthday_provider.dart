@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/utils/notification_helper.dart';
 import '../database/database_helper.dart';
 import '../models/birthday_model.dart';
+import '../services/home_widget_service.dart';
 import 'database_provider.dart';
 
 final birthdayProvider =
@@ -49,6 +50,7 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
       final sorted = [...birthdays]..sort((a, b) =>
           a.daysUntilNext().compareTo(b.daysUntilNext()));
       state = AsyncValue.data(sorted);
+      HomeWidgetService.refreshBirthdays(sorted);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -61,6 +63,7 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
     final sorted = [..._current]..sort((a, b) =>
         a.daysUntilNext().compareTo(b.daysUntilNext()));
     state = AsyncValue.data(sorted);
+    HomeWidgetService.refreshBirthdays(sorted);
   }
 
   Future<void> addBirthday(Birthday birthday,

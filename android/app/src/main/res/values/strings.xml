@@ -5,4 +5,7 @@
     <string name="pylo_habits_widget_description">Shows your habit streaks and progress</string>
     <string name="pylo_progress_widget_description">Shows today\'s task completion progress</string>
     <string name="pylo_quick_add_widget_description">Quickly add a new task</string>
+    <string name="pylo_focus_widget_description">Shows your focus timer status</string>
+    <string name="pylo_checklist_widget_description">Shows your quick checklist</string>
+    <string name="pylo_birthdays_widget_description">Shows upcoming birthdays</string>
 </resources>

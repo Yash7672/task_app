@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_helper.dart';
 import '../models/focus_session_model.dart';
 import '../services/focus/focus_service.dart';
+import '../services/home_widget_service.dart';
 import '../services/security/pin_service.dart';
 import 'database_provider.dart';
 
@@ -58,6 +59,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
   final FocusService _service;
   Timer? _ticker;
   bool _starting = false;
+  int _widgetUpdateCounter = 0;
 
   FocusNotifier(this._dbHelper, this._service) : super(const FocusState()) {
     _restore();
@@ -111,6 +113,37 @@ class FocusNotifier extends StateNotifier<FocusState> {
     }
 
     state = state.copyWithState(active: active);
+
+    // Update widget every 30 seconds to avoid excessive overhead
+    _widgetUpdateCounter++;
+    if (_widgetUpdateCounter >= 30) {
+      _widgetUpdateCounter = 0;
+      _updateFocusWidget();
+    }
+  }
+
+  void _updateFocusWidget() {
+    final active = state.active;
+    if (active == null) {
+      HomeWidgetService.refreshFocus(
+        isActive: false,
+        label: '',
+        remainingMinutes: 0,
+        remainingSeconds: 0,
+        isStrict: false,
+      );
+      return;
+    }
+    final remaining = active.remaining;
+    final mins = remaining.isNegative ? 0 : remaining.inMinutes;
+    final secs = remaining.isNegative ? 0 : remaining.inSeconds % 60;
+    HomeWidgetService.refreshFocus(
+      isActive: true,
+      label: active.label,
+      remainingMinutes: mins,
+      remainingSeconds: secs,
+      isStrict: active.mode == FocusMode.strict,
+    );
   }
 
   Future<void> setStrictMode(bool value) async {
@@ -139,6 +172,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
         isPaused: false,
       );
       _startTicker();
+      _updateFocusWidget();
     } finally {
       _starting = false;
     }
@@ -154,6 +188,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
     _ticker?.cancel();
     await _service.stopFocus(active, completed: false);
     state = state.copyWithState(active: null, isPaused: false);
+    _updateFocusWidget();
     await refreshHistory();
   }
 
@@ -163,6 +198,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
     _ticker?.cancel();
     await _service.stopFocus(active, completed: true);
     state = state.copyWithState(active: null, isPaused: false);
+    _updateFocusWidget();
     await refreshHistory();
   }
 

@@ -54,7 +54,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     try {
       state = const AsyncValue.loading();
       final tasks = await dbHelper.getAllTasks();
-      state = AsyncValue.data(_sortTasks(tasks));
+      _updateState(tasks);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -638,7 +638,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
     try {
       state = const AsyncValue.loading();
       final habits = await dbHelper.getAllHabits();
-      state = AsyncValue.data(habits);
+      _updateState(habits);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_helper.dart';
 import '../models/checklist_model.dart';
+import '../services/home_widget_service.dart';
 import 'database_provider.dart';
 
 class ChecklistsState {
@@ -31,6 +32,17 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
 
   ChecklistNotifier(this.dbHelper) : super(const ChecklistsState()) {
     loadChecklists();
+  }
+
+  void _updateChecklistWidget() {
+    // Push the first checklist's data to the widget
+    if (state.checklists.isNotEmpty) {
+      final first = state.checklists.first;
+      final items = state.items[first.id] ?? const [];
+      HomeWidgetService.refreshChecklist(title: first.title, items: items);
+    } else {
+      HomeWidgetService.refreshChecklist(title: '', items: []);
+    }
   }
 
   Future<void> loadChecklists() async {
@@ -99,6 +111,7 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
         ),
       );
       _upsertItem(item);
+      _updateChecklistWidget();
     } catch (e) {
       debugPrint('Error adding checklist item: $e');
     }
@@ -109,6 +122,7 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
       final updated = item.copyWith(completed: !item.completed);
       await dbHelper.updateChecklistItem(updated);
       _upsertItem(updated);
+      _updateChecklistWidget();
     } catch (e) {
       debugPrint('Error toggling checklist item: $e');
     }
@@ -119,6 +133,7 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
       final updated = item.copyWith(text: text.trim());
       await dbHelper.updateChecklistItem(updated);
       _upsertItem(updated);
+      _updateChecklistWidget();
     } catch (e) {
       debugPrint('Error updating checklist item: $e');
     }
@@ -132,6 +147,7 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
     list.removeWhere((i) => i.id == item.id);
     items[item.checklistId] = list;
     state = ChecklistsState(checklists: state.checklists, items: items);
+    _updateChecklistWidget();
     try {
       await dbHelper.deleteChecklistItem(item.id, item.checklistId);
     } catch (e) {

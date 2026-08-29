@@ -6,8 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.widget.RemoteViews
+import androidx.annotation.Keep
 import es.antonborri.home_widget.HomeWidgetProvider
 
+@Keep
 class PyloQuickAddWidgetProvider : HomeWidgetProvider() {
 
     override fun onUpdate(

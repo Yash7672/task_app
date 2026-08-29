@@ -25,6 +25,9 @@ class WidgetBootReceiver : BroadcastReceiver() {
             PyloHabitsWidgetProvider::class.java,
             PyloProgressWidgetProvider::class.java,
             PyloQuickAddWidgetProvider::class.java,
+            PyloFocusWidgetProvider::class.java,
+            PyloChecklistWidgetProvider::class.java,
+            PyloBirthdaysWidgetProvider::class.java,
         )
 
         for (managerClass in managers) {

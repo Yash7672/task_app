@@ -45,6 +45,9 @@
                 <action android:name="WIDGET_OPEN_HABITS"/>
                 <action android:name="WIDGET_OPEN_DASHBOARD"/>
                 <action android:name="WIDGET_ADD_TASK"/>
+                <action android:name="WIDGET_OPEN_FOCUS"/>
+                <action android:name="WIDGET_OPEN_CHECKLIST"/>
+                <action android:name="WIDGET_OPEN_BIRTHDAYS"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </activity>
@@ -112,10 +115,46 @@
                 android:resource="@xml/pylo_quick_add_widget_info"/>
         </receiver>
 
+        <!-- Widget: Focus -->
+        <receiver
+            android:name=".PyloFocusWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pylo_focus_widget_info"/>
+        </receiver>
+
+        <!-- Widget: Checklist -->
+        <receiver
+            android:name=".PyloChecklistWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pylo_checklist_widget_info"/>
+        </receiver>
+
+        <!-- Widget: Birthdays -->
+        <receiver
+            android:name=".PyloBirthdaysWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pylo_birthdays_widget_info"/>
+        </receiver>
+
         <!-- Boot completed receiver for widget refresh -->
         <receiver
             android:name=".WidgetBootReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>

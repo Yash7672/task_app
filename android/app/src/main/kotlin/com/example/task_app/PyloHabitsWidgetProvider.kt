@@ -7,9 +7,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.view.View
 import android.widget.RemoteViews
+import androidx.annotation.Keep
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 
+@Keep
 class PyloHabitsWidgetProvider : HomeWidgetProvider() {
 
     override fun onUpdate(
@@ -90,6 +92,15 @@ class PyloHabitsWidgetProvider : HomeWidgetProvider() {
                     setViewVisibility(R.id.widget_empty, View.VISIBLE)
                 } else {
                     setViewVisibility(R.id.widget_empty, View.GONE)
+                }
+
+                // ── Today summary ──
+                val completedToday = widgetData.getInt("habits_completed_today", 0)
+                if (count > 0) {
+                    setViewVisibility(R.id.widget_today_summary, View.VISIBLE)
+                    setTextViewText(R.id.widget_today_summary, "Today: $completedToday / $count completed")
+                } else {
+                    setViewVisibility(R.id.widget_today_summary, View.GONE)
                 }
             }
 

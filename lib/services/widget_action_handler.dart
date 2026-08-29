@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import '../features/tasks/screens/add_edit_task_screen.dart';
 import '../features/tasks/screens/task_list_screen.dart';
 import '../features/streaks/screens/streaks_screen.dart';
+import '../features/focus/screens/focus_screen.dart';
+import '../features/checklist/screens/checklist_screen.dart';
+import '../features/birthdays/screens/birthdays_screen.dart';
 
 class WidgetActionHandler {
   static const _channel = MethodChannel('pylo/focus');
@@ -45,6 +48,21 @@ class WidgetActionHandler {
         case 'add_task':
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const AddEditTaskScreen()),
+          );
+          break;
+        case 'open_focus':
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FocusScreen()),
+          );
+          break;
+        case 'open_checklist':
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ChecklistScreen()),
+          );
+          break;
+        case 'open_birthdays':
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BirthdaysScreen()),
           );
           break;
       }

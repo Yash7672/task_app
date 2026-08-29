@@ -7,9 +7,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.view.View
 import android.widget.RemoteViews
+import androidx.annotation.Keep
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 
+@Keep
 class PyloProgressWidgetProvider : HomeWidgetProvider() {
 
     override fun onUpdate(

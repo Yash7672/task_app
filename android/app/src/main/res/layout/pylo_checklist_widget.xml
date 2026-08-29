@@ -11,22 +11,23 @@
         android:id="@+id/widget_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="PYLO \u2022 Today"
+        android:text="\uD83D\uDED2 CHECKLIST"
         android:textColor="@color/widget_header_color"
         android:textSize="14sp"
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/widget_progress"
+        android:id="@+id/widget_item_0"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
-        android:textSize="12sp"
-        android:paddingTop="2dp"
-        android:paddingBottom="4dp" />
+        android:textSize="13sp"
+        android:paddingTop="8dp"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/widget_task_0"
+        android:id="@+id/widget_item_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
@@ -36,7 +37,7 @@
         android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/widget_task_1"
+        android:id="@+id/widget_item_2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
@@ -46,7 +47,7 @@
         android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/widget_task_2"
+        android:id="@+id/widget_item_3"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
@@ -56,7 +57,7 @@
         android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/widget_task_3"
+        android:id="@+id/widget_item_4"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
@@ -64,43 +65,15 @@
         android:paddingTop="4dp"
         android:maxLines="1"
         android:ellipsize="end" />
-
-    <TextView
-        android:id="@+id/widget_task_4"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="4dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
-
-    <TextView
-        android:id="@+id/widget_more"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_empty_color"
-        android:textSize="12sp"
-        android:paddingTop="4dp"
-        android:visibility="gone" />
 
     <TextView
         android:id="@+id/widget_empty"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No tasks today. Tap + to add."
+        android:text="No checklist items."
         android:textColor="@color/widget_empty_color"
         android:textSize="12sp"
         android:paddingTop="10dp"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/widget_streak"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="#FFB74D"
-        android:textSize="12sp"
-        android:textStyle="bold"
         android:visibility="gone" />
 
 </LinearLayout>

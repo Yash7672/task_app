@@ -11,13 +11,13 @@
         android:id="@+id/widget_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="\uD83D\uDD25 Habits"
+        android:text="\uD83C\uDF82 BIRTHDAYS"
         android:textColor="@color/widget_header_color"
         android:textSize="14sp"
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/widget_habit_0"
+        android:id="@+id/widget_birthday_0"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
@@ -27,7 +27,7 @@
         android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/widget_habit_1"
+        android:id="@+id/widget_birthday_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
@@ -37,27 +37,7 @@
         android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/widget_habit_2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="6dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
-
-    <TextView
-        android:id="@+id/widget_habit_3"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="6dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
-
-    <TextView
-        android:id="@+id/widget_habit_4"
+        android:id="@+id/widget_birthday_2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_task_color"
@@ -70,19 +50,10 @@
         android:id="@+id/widget_empty"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No habits yet. Add one in PYLO."
+        android:text="No upcoming birthdays."
         android:textColor="@color/widget_empty_color"
         android:textSize="12sp"
         android:paddingTop="10dp"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/widget_today_summary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="11sp"
-        android:paddingTop="4dp"
         android:visibility="gone" />
 
 </LinearLayout>

@@ -77,7 +77,9 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
           ref.read(birthdayProvider.notifier).rescheduleAllReminders().catchError((e) {
             if (kDebugMode) debugPrint('Birthday reschedule failed: $e');
           }),
-        HomeWidgetService.init().catchError((e) {
+        HomeWidgetService.init()
+            .then((_) => HomeWidgetService.pushNow())
+            .catchError((e) {
           if (kDebugMode) debugPrint('HomeWidget init failed: $e');
         }),
       ]);

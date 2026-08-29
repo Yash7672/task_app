@@ -111,6 +111,21 @@ class MainActivity : FlutterFragmentActivity() {
                 pendingWidgetTaskId = null
                 pendingWidgetHabitId = null
             }
+            "WIDGET_OPEN_FOCUS" -> {
+                pendingWidgetAction = "open_focus"
+                pendingWidgetTaskId = null
+                pendingWidgetHabitId = null
+            }
+            "WIDGET_OPEN_CHECKLIST" -> {
+                pendingWidgetAction = "open_checklist"
+                pendingWidgetTaskId = null
+                pendingWidgetHabitId = null
+            }
+            "WIDGET_OPEN_BIRTHDAYS" -> {
+                pendingWidgetAction = "open_birthdays"
+                pendingWidgetTaskId = null
+                pendingWidgetHabitId = null
+            }
         }
     }
 
