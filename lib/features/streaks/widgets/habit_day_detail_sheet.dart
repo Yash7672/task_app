@@ -5,11 +5,11 @@ import 'package:intl/intl.dart';
 import '../../../models/habit_completion_item.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/database_provider.dart';
+import '../../../providers/task_provider.dart';
 
-/// Bottom sheet shown when tapping a 🔥 (completed) date on the streak
-/// history calendar. Displays the checklist snapshotted when the habit was
-/// completed on that specific day. Users can add, edit, and delete items
-/// for that specific date without affecting other dates.
+/// Bottom sheet shown when tapping any date on the streak history calendar.
+/// Shows status and streak/miss controls for historical dates, plus the
+/// completion checklist for completed dates.
 Future<void> showHabitDayDetailSheet(
   BuildContext context,
   WidgetRef ref,
@@ -42,6 +42,8 @@ class _HabitDayDetailSheet extends ConsumerStatefulWidget {
 class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
   late List<HabitCompletionItem> _items;
   bool _isLoading = true;
+  bool _isCompleted = false;
+  bool _isProcessing = false;
   final _addController = TextEditingController();
   final _editController = TextEditingController();
 
@@ -64,17 +66,67 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
     return '${widget.day.year}-$m-$d';
   }
 
+  bool get _isToday {
+    final now = DateTime.now();
+    return widget.day.year == now.year &&
+        widget.day.month == now.month &&
+        widget.day.day == now.day;
+  }
+
   Future<void> _loadItems() async {
     final dbHelper = ref.read(databaseProvider);
     final items = await dbHelper.getCompletionChecklist(
       widget.habit.id,
       _dateKey,
     );
+    // Also check if there's a habit log entry for this date.
+    final completed = await ref
+        .read(habitsProvider.notifier)
+        .isCompletedOnDate(widget.habit.id, widget.day);
     if (mounted) {
       setState(() {
         _items = items;
+        _isCompleted = completed;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _markAsStreak() async {
+    if (_isProcessing) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isProcessing = true);
+    await ref
+        .read(habitsProvider.notifier)
+        .markHabitDate(widget.habit.id, widget.day);
+    if (mounted) {
+      await _loadItems();
+      setState(() => _isProcessing = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Marked as streak for ${DateFormat('d MMM yyyy').format(widget.day)}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _markAsMiss() async {
+    if (_isProcessing) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isProcessing = true);
+    await ref
+        .read(habitsProvider.notifier)
+        .unmarkHabitDate(widget.habit.id, widget.day);
+    if (mounted) {
+      await _loadItems();
+      setState(() => _isProcessing = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Removed streak for ${DateFormat('d MMM yyyy').format(widget.day)}'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
@@ -175,9 +227,13 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Header ──
               Row(
                 children: [
-                  const Text('🔥', style: TextStyle(fontSize: 24)),
+                  Text(
+                    _isCompleted ? '🔥' : '📅',
+                    style: const TextStyle(fontSize: 24),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -196,9 +252,76 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                       ],
                     ),
                   ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
                 ],
               ),
+
               const SizedBox(height: 12),
+
+              // ── Status badge ──
+              _StatusBadge(isCompleted: _isCompleted),
+
+              const SizedBox(height: 12),
+
+              // ── Streak / Miss controls ──
+              if (_isProcessing)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isCompleted ? null : _markAsStreak,
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text('✓ Streak'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.green,
+                          side: BorderSide(
+                            color: _isCompleted
+                                ? Colors.grey.shade300
+                                : Colors.green,
+                          ),
+                          minimumSize: const Size.fromHeight(44),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: !_isCompleted ? null : _markAsMiss,
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('✕ Miss Streak'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: BorderSide(
+                            color: !_isCompleted
+                                ? Colors.grey.shade300
+                                : Colors.red,
+                          ),
+                          minimumSize: const Size.fromHeight(44),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+              const SizedBox(height: 16),
+
+              // ── Checklist section (only for completed dates) ──
               if (_isLoading)
                 const Center(
                   child: Padding(
@@ -206,7 +329,7 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                     child: CircularProgressIndicator(),
                   ),
                 )
-              else ...[
+              else if (_isCompleted) ...[
                 if (_items.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -247,10 +370,62 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                     ),
                   ],
                 ),
+              ] else ...[
+                // Not completed — show a note
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    _isToday
+                        ? 'Not completed today. Use the Streak button above to mark it, or complete from the habit card.'
+                        : 'Not completed on this day. Use the Streak button above to mark it manually.',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ),
               ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shows the completion status of the selected date.
+class _StatusBadge extends StatelessWidget {
+  final bool isCompleted;
+
+  const _StatusBadge({required this.isCompleted});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: isCompleted
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isCompleted ? Colors.green.shade300 : Colors.orange.shade300,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isCompleted ? Icons.check_circle : Icons.cancel_outlined,
+            size: 18,
+            color: isCompleted ? Colors.green : Colors.orange,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            isCompleted ? '✓ Streak' : '✕ Missed',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: isCompleted ? Colors.green.shade700 : Colors.orange.shade700,
+            ),
+          ),
+        ],
       ),
     );
   }

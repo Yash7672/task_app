@@ -15,7 +15,7 @@ class TaskListScreen extends ConsumerStatefulWidget {
 
 class _TaskListScreenState extends ConsumerState<TaskListScreen> {
   String _queryLower = '';
-  String _filter = 'All';
+  String _filter = 'Today';
   bool _showArchived = false;
   Timer? _debounce;
 
@@ -23,6 +23,11 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
   void dispose() {
     _debounce?.cancel();
     super.dispose();
+  }
+
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year && date.month == now.month && date.day == now.day;
   }
 
   @override
@@ -40,6 +45,7 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
           task.notes.toLowerCase().contains(_queryLower);
 
       final matchesFilter = switch (_filter) {
+        'Today' => _isToday(task.dueDate),
         'Completed' => task.isCompleted,
         'Pending' => !task.isCompleted,
         'Favorites' => task.isFavorite,
@@ -83,6 +89,7 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
                 isExpanded: true,
                 underline: const SizedBox.shrink(),
                 items: const [
+                  DropdownMenuItem(value: 'Today', child: Text('Today')),
                   DropdownMenuItem(value: 'All', child: Text('All')),
                   DropdownMenuItem(value: 'Completed', child: Text('Completed')),
                   DropdownMenuItem(value: 'Pending', child: Text('Pending')),

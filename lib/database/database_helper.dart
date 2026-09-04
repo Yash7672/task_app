@@ -669,6 +669,47 @@ class DatabaseHelper {
         where: 'habitId = ?', whereArgs: [habitId], orderBy: 'date DESC');
   }
 
+  /// Deletes the habit log entry for [habitId] on [dateKey] ('yyyy-MM-dd').
+  Future<void> removeHabitCompletion(String habitId, String dateKey) async {
+    final db = await database;
+    await db.delete(
+      'habit_logs',
+      where: 'habitId = ? AND date = ?',
+      whereArgs: [habitId, dateKey],
+    );
+    // Also remove the completion checklist snapshot for that day.
+    await db.delete(
+      'habit_completion_items',
+      where: 'habitId = ? AND completionDate = ?',
+      whereArgs: [habitId, dateKey],
+    );
+  }
+
+  /// Returns all unique completion dates for [habitId] as DateTime objects,
+  /// sorted ascending. Used for streak recalculation.
+  Future<List<DateTime>> getHabitCompletionDates(String habitId) async {
+    final db = await database;
+    final logs = await db.query(
+      'habit_logs',
+      columns: ['date'],
+      where: 'habitId = ?',
+      whereArgs: [habitId],
+    );
+    final dates = <DateTime>[];
+    for (final log in logs) {
+      final raw = log['date'];
+      if (raw is String && raw.length >= 10) {
+        final dateStr = raw.substring(raw.length - 10);
+        final date = DateTime.tryParse(dateStr);
+        if (date != null) {
+          dates.add(DateTime(date.year, date.month, date.day));
+        }
+      }
+    }
+    dates.sort();
+    return dates;
+  }
+
   /// Replaces the completion checklist snapshot for [habitId] on [dateKey]
   /// ('yyyy-MM-dd'). Called once, at the moment the habit is completed.
   Future<void> saveCompletionChecklist(

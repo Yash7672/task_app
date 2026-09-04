@@ -416,16 +416,19 @@ class HomeWidgetService {
       _checklistProviderName,
       _birthdaysProviderName,
     ];
-    for (final name in providers) {
-      try {
-        await HomeWidget.updateWidget(
-          androidName: name.split('.').last,
-          qualifiedAndroidName: name,
-        );
-      } catch (e) {
-        debugPrint('HomeWidget update $name failed: $e');
-      }
-    }
+    // Update all widgets concurrently instead of sequentially.
+    await Future.wait(
+      providers.map((name) async {
+        try {
+          await HomeWidget.updateWidget(
+            androidName: name.split('.').last,
+            qualifiedAndroidName: name,
+          );
+        } catch (e) {
+          debugPrint('HomeWidget update $name failed: $e');
+        }
+      }),
+    );
   }
 
   // ── Task completion from widget ────────────────────────────────────

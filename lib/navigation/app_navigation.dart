@@ -18,6 +18,7 @@ class AppNavigation extends ConsumerStatefulWidget {
 
 class _AppNavigationState extends ConsumerState<AppNavigation> {
   int _currentIndex = 0;
+  bool _hasActiveFocus = false;
 
   /// IndexedStack keeps all visited screens alive so switching tabs doesn't
   /// rebuild screens from scratch — preserving scroll position, loaded data,
@@ -32,11 +33,26 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   ];
 
   @override
-  Widget build(BuildContext context) {
-    final focus = ref.watch(focusProvider);
-    final hasActiveFocus = focus.active != null;
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Use ref.listen to only rebuild when active focus actually changes,
+      // instead of watching the full FocusState (which rebuilds every second
+      // during an active session).
+      ref.listenManual<FocusState>(focusProvider, (prev, next) {
+        final wasActive = prev?.active != null;
+        final isActive = next.active != null;
+        if (wasActive != isActive) {
+          setState(() => _hasActiveFocus = isActive);
+        }
+      });
+    });
+  }
 
-    if (hasActiveFocus) {
+  @override
+  Widget build(BuildContext context) {
+    if (_hasActiveFocus) {
       return const SizedBox.shrink();
     }
 

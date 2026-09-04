@@ -806,4 +806,124 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
           raw.substring(raw.length - 10) == dateKey;
     });
   }
+
+  /// Recalculates currentStreak and bestStreak from the stored habit_logs
+  /// for the given habit, then persists the updated Habit record.
+  ///
+  /// The streak is the longest run of consecutive days ending at (or just
+  /// before) today. 'bestStreak' is the all-time longest consecutive run.
+  Future<Habit?> _recalculateStreaks(String habitId) async {
+    try {
+      final habit = await dbHelper.getHabit(habitId);
+      if (habit == null) return null;
+
+      final dates = await dbHelper.getHabitCompletionDates(habitId);
+      if (dates.isEmpty) {
+        final updatedHabit = habit.copyWith(
+          currentStreak: 0,
+          bestStreak: habit.bestStreak, // preserve all-time best
+          lastCompletedDate: null,
+          updatedAt: DateTime.now(),
+        );
+        await dbHelper.updateHabit(updatedHabit);
+        _updateHabitInState(habitId, updatedHabit);
+        return updatedHabit;
+      }
+
+      final today = _startOfDay(DateTime.now());
+      final yesterday = _startOfDay(DateTime.now().subtract(const Duration(days: 1)));
+
+      // Current streak: consecutive days ending at today or yesterday.
+      int currentStreak = 0;
+      if (dates.last.isAtSameMomentAs(today) ||
+          dates.last.isAtSameMomentAs(yesterday)) {
+        // Walk backwards from the latest date.
+        currentStreak = 1;
+        for (int i = dates.length - 1; i > 0; i--) {
+          final diff = dates[i].difference(dates[i - 1]).inDays;
+          if (diff == 1) {
+            currentStreak++;
+          } else {
+            break;
+          }
+        }
+      }
+
+      // Best streak: longest consecutive run across all dates.
+      int bestStreak = habit.bestStreak; // preserve at least previous best
+      int run = 1;
+      for (int i = 1; i < dates.length; i++) {
+        final diff = dates[i].difference(dates[i - 1]).inDays;
+        if (diff == 1) {
+          run++;
+        } else {
+          if (run > bestStreak) bestStreak = run;
+          run = 1;
+        }
+      }
+      if (run > bestStreak) bestStreak = run;
+
+      final updated = habit.copyWith(
+        currentStreak: currentStreak,
+        bestStreak: bestStreak,
+        lastCompletedDate: dates.last,
+        updatedAt: DateTime.now(),
+      );
+      await dbHelper.updateHabit(updated);
+      _updateHabitInState(habitId, updated);
+      return updated;
+    } catch (e) {
+      debugPrint('Error recalculating streaks: $e');
+      return null;
+    }
+  }
+
+  static DateTime _startOfDay(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  /// Marks [date] as completed for [habitId] (historical streak control).
+  ///
+  /// If the date already has a completion record, this is a no-op.
+  /// After marking, streaks are recalculated from stored history.
+  Future<void> markHabitDate(String habitId, DateTime date) async {
+    try {
+      final dateKey = habitDateKey(date);
+
+      // Idempotent: skip if already completed.
+      final already = await isCompletedOnDate(habitId, date);
+      if (already) return;
+
+      await dbHelper.logHabitCompletion(habitId, dateKey);
+      await _recalculateStreaks(habitId);
+    } catch (e) {
+      debugPrint('Error marking habit date: $e');
+    }
+  }
+
+  /// Removes the completion record for [date] on [habitId]
+  /// (historical miss-streak control).
+  ///
+  /// After removal, streaks are recalculated from stored history.
+  Future<void> unmarkHabitDate(String habitId, DateTime date) async {
+    try {
+      final dateKey = habitDateKey(date);
+      await dbHelper.removeHabitCompletion(habitId, dateKey);
+      await _recalculateStreaks(habitId);
+    } catch (e) {
+      debugPrint('Error unmarking habit date: $e');
+    }
+  }
+
+  /// Updates a single habit in the current state list without reloading
+  /// the entire collection.
+  void _updateHabitInState(String habitId, Habit updated) {
+    final habits = _currentHabits;
+    final index = habits.indexWhere((h) => h.id == habitId);
+    if (index != -1) {
+      final list = List<Habit>.from(habits);
+      list[index] = updated;
+      _updateState(list);
+    }
+  }
 }

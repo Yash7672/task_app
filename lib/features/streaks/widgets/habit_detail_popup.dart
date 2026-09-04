@@ -47,19 +47,18 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
 
     final day =
         DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
-    final logs = ref.read(habitLogsProvider(widget.habit.id)).value;
-    final isCompleted =
-        logs != null && _completedDatesFrom(logs).contains(day);
-
-    if (isCompleted) {
-      await showHabitDayDetailSheet(context, ref, widget.habit, day);
-    } else {
+    // Allow tapping any past date — the detail sheet will show
+    // streak/miss controls for every date.
+    final isFuture = day.isAfter(DateTime.now());
+    if (isFuture) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Habit not completed on this day.'),
+          content: Text('Cannot modify future dates.'),
         ),
       );
+      return;
     }
+    await showHabitDayDetailSheet(context, ref, widget.habit, day);
   }
 
   @override

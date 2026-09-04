@@ -406,10 +406,12 @@ void main() {
       container.dispose();
     });
 
-    testWidgets('e) tapping an incomplete date shows the not-completed message',
+    testWidgets('e) tapping an incomplete date opens the day detail sheet',
         (tester) async {
       final habit = await seedHabit(); // never completed
       final now = DateTime.now();
+      final container = createContainer(autoDispose: false);
+      await container.read(habitsProvider.notifier).loadHabits();
 
       await pumpPopup(tester, habit);
 
@@ -420,8 +422,15 @@ void main() {
       await tester.tap(dayFinder);
       await tester.pumpAndSettle();
 
-      expect(find.text('Habit not completed on this day.'), findsOneWidget);
-      expect(find.byType(BottomSheet), findsNothing);
+      // Now opens a detail sheet with streak/miss controls
+      expect(find.text('✕ Miss Streak'), findsOneWidget);
+      expect(find.text('✓ Streak'), findsOneWidget);
+
+      // Flush HomeWidgetService debounce timer so no timer stays pending.
+      await tester.pump(const Duration(seconds: 1));
+
+      // Dispose before the test body ends.
+      container.dispose();
     });
   });
 }

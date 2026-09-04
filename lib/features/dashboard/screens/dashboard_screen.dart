@@ -68,7 +68,6 @@ class DashboardScreen extends StatelessWidget {
             _NeedsAttentionSection(),
             _BirthdaysSection(),
             _TodayTasksSection(),
-            _UpcomingTasksSection(),
             SizedBox(height: 80),
           ],
         ),
@@ -428,24 +427,7 @@ class _TodayTasksSection extends ConsumerWidget {
   }
 }
 
-// ── Upcoming tasks (watches upcomingTasks only) ─────────────────────
 
-class _UpcomingTasksSection extends ConsumerWidget {
-  const _UpcomingTasksSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final upcomingTasks = ref.watch(upcomingTasksProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(context, 'Upcoming', upcomingTasks.length),
-        _buildTaskList(upcomingTasks.take(5).toList()),
-      ],
-    );
-  }
-}
 
 // ── Shared helpers ──────────────────────────────────────────────────
 

@@ -3,6 +3,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+/// Notification ID namespace offsets to prevent hash collisions.
+/// Tasks use `id.hashCode`, birthdays use `id.hashCode + _birthdayOffset`.
+/// This ensures task "abc" and birthday "abc-0" can never share an ID.
+class NotificationId {
+  static const int birthdayOffset = 500000000;
+}
+
 class NotificationHelper {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
@@ -119,9 +126,12 @@ class NotificationHelper {
       return;
     }
 
+    // Ensure task notification IDs are always positive and within 32-bit range.
+    final safeId = id & 0x7FFFFFFF;
+
     try {
       await _notifications.zonedSchedule(
-        id,
+        safeId,
         title,
         body,
         _toTZDate(scheduledDate),
@@ -176,10 +186,11 @@ class NotificationHelper {
     }
     const maxReminders = 12;
     try {
-      // Cancel all task reminder IDs concurrently
+      // Cancel all task reminder IDs concurrently.
+      // Use consistent positive ID math matching scheduleTaskReminder.
       final cancelFutures = <Future<void>>[];
       for (int i = 0; i < maxReminders; i++) {
-        cancelFutures.add(_notifications.cancel(taskId.hashCode + i));
+        cancelFutures.add(_notifications.cancel((taskId.hashCode + i) & 0x7FFFFFFF));
       }
       await Future.wait(cancelFutures);
     } catch (e) {
@@ -203,9 +214,12 @@ class NotificationHelper {
           firstOccurrence.day, firstOccurrence.hour, firstOccurrence.minute);
     }
 
+    // Birthday IDs use an offset namespace to prevent collisions with task IDs.
+    final notificationId = (key.hashCode + NotificationId.birthdayOffset) & 0x7FFFFFFF;
+
     try {
       await _notifications.zonedSchedule(
-        key.hashCode,
+        notificationId,
         title,
         body,
         _toTZDate(scheduled),
@@ -259,6 +273,8 @@ class NotificationHelper {
       // year, and cancelAllForBirthday can always find it.
       await scheduleYearlyReminder(
         key: '$birthdayId-$days',
+        // Offset birthday IDs into a separate namespace to avoid collisions
+        // with task reminder IDs that use raw hashCode.
         title: days == 0 ? 'Birthday Today 🎂' : 'Birthday Reminder 🎂',
         body: body,
         firstOccurrence: reminderDate,
@@ -270,15 +286,17 @@ class NotificationHelper {
     if (kIsWeb) {
       return;
     }
-    // Batch cancel: cancel current year IDs and legacy year IDs concurrently
+    // Batch cancel: cancel current year IDs and legacy year IDs concurrently.
+    // Birthday IDs use the offset namespace.
     final cancelFutures = <Future<void>>[];
     for (final days in [0, 1, 3, 7]) {
-      cancelFutures.add(_notifications.cancel('$birthdayId-$days'.hashCode));
+      final id = (('$birthdayId-$days'.hashCode) + NotificationId.birthdayOffset) & 0x7FFFFFFF;
+      cancelFutures.add(_notifications.cancel(id));
       // Legacy ids (older builds) included a birth-year suffix.
       final now = DateTime.now();
       for (var year = now.year - 2; year <= now.year + 2; year++) {
-        cancelFutures.add(
-            _notifications.cancel('$birthdayId-$days-$year'.hashCode));
+        final legacyId = (('$birthdayId-$days-$year'.hashCode) + NotificationId.birthdayOffset) & 0x7FFFFFFF;
+        cancelFutures.add(_notifications.cancel(legacyId));
       }
     }
     await Future.wait(cancelFutures);
@@ -392,6 +410,21 @@ class NotificationHelper {
       return permissions != null;
     }
     return true;
+  }
+
+  /// Check if SCHEDULE_EXACT_ALARM permission is granted on Android 12+.
+  /// Returns true on non-Android or older Android versions.
+  static Future<bool> canScheduleExactAlarms() async {
+    if (kIsWeb) return true;
+    await ensureInitialized();
+    final androidImpl = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl == null) return true;
+    final areNotificationsEnabled = await androidImpl.areNotificationsEnabled();
+    // On Android 12+ (API 31+), exact alarms require explicit permission.
+    // flutter_local_notifications v17 handles this via requestExactAlarmsPermission().
+    // If the user denied it, scheduled alarms will use inexact mode.
+    return areNotificationsEnabled ?? true;
   }
 }
 

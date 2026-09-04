@@ -112,7 +112,17 @@ class FocusNotifier extends StateNotifier<FocusState> {
       return;
     }
 
-    state = state.copyWithState(active: active);
+    // Only rebuild state when the remaining time display changes
+    // (every minute boundary or on expiry) to avoid rebuilding all
+    // watching widgets every single second.
+    final remaining = active.remaining;
+    final newMinutes = remaining.isNegative ? 0 : remaining.inMinutes;
+    final oldMinutes = state.active?.remaining.isNegative == true
+        ? 0
+        : (state.active?.remaining.inMinutes ?? 0);
+    if (newMinutes != oldMinutes) {
+      state = state.copyWithState(active: active);
+    }
 
     // Update widget every 30 seconds to avoid excessive overhead
     _widgetUpdateCounter++;
