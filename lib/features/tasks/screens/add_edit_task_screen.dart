@@ -48,6 +48,11 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   ];
   final List<int> _reminderOptions = [1, 5, 10, 15, 30, 60, 120, 180, 1440];
 
+  /// Guards against double-fire of _saveTask (rapid double-tap on the
+  /// Create/Update button) which would write the task twice and duplicate
+  /// every reminder notification.
+  bool _saving = false;
+
   @override
   void initState() {
     super.initState();
@@ -93,7 +98,19 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       lastDate: DateTime(2100),
     );
     if (picked != null && mounted) {
-      setState(() => _dueDate = picked);
+      setState(() {
+        _dueDate = picked;
+        // Re-anchor the chosen times onto the newly picked date so start/end
+        // never silently slide to yesterday/another date.
+        if (_startTime != null) {
+          _startTime = DateTime(picked.year, picked.month, picked.day,
+              _startTime!.hour, _startTime!.minute);
+        }
+        if (_endTime != null) {
+          _endTime = DateTime(picked.year, picked.month, picked.day,
+              _endTime!.hour, _endTime!.minute);
+        }
+      });
     }
   }
 
@@ -200,6 +217,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   }
 
   Future<void> _saveTask() async {
+    if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
@@ -212,58 +230,69 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       return;
     }
 
-    final conflicts = await _findConflicts();
-    if (conflicts.isNotEmpty) {
-      final proceed = await _confirmConflict(conflicts);
-      if (!proceed) return;
-    }
+    _saving = true;
+    try {
+      final conflicts = await _findConflicts();
+      if (conflicts.isNotEmpty) {
+        final proceed = await _confirmConflict(conflicts);
+        if (!proceed) return;
+      }
 
-    final hasReminders = _selectedReminders.isNotEmpty &&
-        ref.read(settingsPreferencesProvider).notificationsEnabled;
-    final task = Task(
-      id: widget.taskToEdit?.id,
-      title: _titleController.text.trim(),
-      description: _descController.text.trim(),
-      category: _selectedCategory,
-      priority: _selectedPriority,
-      dueDate: _dueDate,
-      startTime: _startTime,
-      endTime: _endTime,
-      notes: _notesController.text.trim(),
-      repeatRule: _repeatRule,
-      checklist: _checklist,
-      reminderMinutes: _selectedReminders,
-      estimatedDuration: _durationController.text.trim(),
-      isCompleted: widget.taskToEdit?.isCompleted ?? false,
-      isArchived: widget.taskToEdit?.isArchived ?? false,
-      isDeleted: widget.taskToEdit?.isDeleted ?? false,
-      isFavorite: widget.taskToEdit?.isFavorite ?? false,
-      isPinned: widget.taskToEdit?.isPinned ?? false,
-      completedAt: widget.taskToEdit?.completedAt,
-      createdAt: widget.taskToEdit?.createdAt,
-      color: widget.taskToEdit?.color ?? '',
-    );
-
-    if (widget.taskToEdit != null) {
-      await NotificationHelper.cancelAllForTask(task.id);
-      await ref.read(taskProvider.notifier).updateTask(task);
-    } else {
-      await ref.read(taskProvider.notifier).addTask(task);
-    }
-
-    if (hasReminders) {
-      final taskDateTime = _startTime ??
-          DateTime(_dueDate.year, _dueDate.month, _dueDate.day, 9, 0);
-      await NotificationHelper.scheduleTaskReminders(
-        taskId: task.id,
-        taskTitle: task.title,
-        taskDateTime: taskDateTime,
+      final isEditingCompleted = widget.taskToEdit?.isCompleted ?? false;
+      final hasReminders = _selectedReminders.isNotEmpty &&
+          ref.read(settingsPreferencesProvider).notificationsEnabled;
+      final task = Task(
+        id: widget.taskToEdit?.id,
+        title: _titleController.text.trim(),
+        description: _descController.text.trim(),
+        category: _selectedCategory,
+        priority: _selectedPriority,
+        dueDate: _dueDate,
+        startTime: _startTime,
+        endTime: _endTime,
+        notes: _notesController.text.trim(),
+        repeatRule: _repeatRule,
+        checklist: _checklist,
         reminderMinutes: _selectedReminders,
+        estimatedDuration: _durationController.text.trim(),
+        isCompleted: widget.taskToEdit?.isCompleted ?? false,
+        isArchived: widget.taskToEdit?.isArchived ?? false,
+        isDeleted: widget.taskToEdit?.isDeleted ?? false,
+        isFavorite: widget.taskToEdit?.isFavorite ?? false,
+        isPinned: widget.taskToEdit?.isPinned ?? false,
+        completedAt: widget.taskToEdit?.completedAt,
+        createdAt: widget.taskToEdit?.createdAt,
+        color: widget.taskToEdit?.color ?? '',
+        // Anchor used by monthly/yearly recurrence so rescheduling the task
+        // never drifts off the originally chosen day-of-month.
+        repeatMonthday: _dueDate.day,
       );
-    }
 
-    if (mounted) {
-      Navigator.pop(context);
+      if (widget.taskToEdit != null) {
+        await NotificationHelper.cancelAllForTask(task.id);
+        await ref.read(taskProvider.notifier).updateTask(task);
+      } else {
+        await ref.read(taskProvider.notifier).addTask(task);
+      }
+
+      // A task that was already completed (e.g. its title/due date being
+      // corrected after completion) must NOT re-arm its reminders.
+      if (hasReminders && !isEditingCompleted) {
+        final taskDateTime = _startTime ??
+            DateTime(_dueDate.year, _dueDate.month, _dueDate.day, 9, 0);
+        await NotificationHelper.scheduleTaskReminders(
+          taskId: task.id,
+          taskTitle: task.title,
+          taskDateTime: taskDateTime,
+          reminderMinutes: _selectedReminders,
+        );
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } finally {
+      _saving = false;
     }
   }
 

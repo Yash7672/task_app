@@ -57,6 +57,11 @@ class Task {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// The day-of-month the user originally picked for this repeating task.
+  /// Monthly/yearly recurrence clamps against THIS anchor (never drifting):
+  /// a Jan-31 task keeps recurring on the 31st — Feb 28, Mar 31, Apr 30…
+  final int? repeatMonthday;
+
   Task({
     String? id,
     required this.title,
@@ -78,6 +83,7 @@ class Task {
     List<int>? reminderMinutes,
     this.estimatedDuration = '',
     this.completedAt,
+    this.repeatMonthday,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -109,6 +115,7 @@ class Task {
     Object? completedAt = _clear,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? repeatMonthday,
   }) {
     return Task(
       id: id ?? this.id,
@@ -132,6 +139,7 @@ class Task {
       estimatedDuration: estimatedDuration ?? this.estimatedDuration,
       completedAt:
           completedAt == _clear ? this.completedAt : completedAt as DateTime?,
+      repeatMonthday: repeatMonthday ?? this.repeatMonthday,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -162,6 +170,7 @@ class Task {
       'completedAt': completedAt?.millisecondsSinceEpoch,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
+      'repeatMonthday': repeatMonthday,
     };
   }
 
@@ -234,6 +243,7 @@ class Task {
       checklist: parsedChecklist,
       reminderMinutes: parsedReminders,
       estimatedDuration: map['estimatedDuration'] ?? '',
+      repeatMonthday: map['repeatMonthday'] is int ? map['repeatMonthday'] : null,
       completedAt:
           map['completedAt'] != null ? _parseDate(map['completedAt']) : null,
       createdAt: createdAt,
@@ -278,14 +288,21 @@ class Task {
           year++;
         }
         final lastDay = DateTime(year, month + 1, 0).day;
+        // Clamp the ORIGINAL anchor day against each target month so a
+        // Jan-31 task recurring "on the 31st" lands on Feb 28, then Mar 31,
+        // Apr 30… instead of drifting to the 28th forever.
+        final anchorDay = repeatMonthday ?? dueDate.day;
         nextDate =
-            DateTime(year, month, dueDate.day.clamp(1, lastDay), dueDate.hour,
+            DateTime(year, month, anchorDay.clamp(1, lastDay), dueDate.hour,
                 dueDate.minute);
       case 'yearly':
         final year = dueDate.year + 1;
         final lastDay = DateTime(year, dueDate.month + 1, 0).day;
+        // Anchor-based clamp: a Feb-29 task fires on Feb 29 in leap years and
+        // clamps to Feb 28 otherwise (never rolls over to Mar 1).
+        final anchorDay = repeatMonthday ?? dueDate.day;
         nextDate = DateTime(year, dueDate.month,
-            dueDate.day.clamp(1, lastDay), dueDate.hour, dueDate.minute);
+            anchorDay.clamp(1, lastDay), dueDate.hour, dueDate.minute);
       default:
         nextDate = _atTime(dueDate.day + 1);
     }
@@ -326,6 +343,7 @@ class Task {
       checklist: List<ChecklistItemData>.from(checklist),
       reminderMinutes: List<int>.from(reminderMinutes),
       estimatedDuration: estimatedDuration,
+      repeatMonthday: repeatMonthday ?? dueDate.day,
     );
   }
 

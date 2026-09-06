@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/focus_channel.dart';
 import '../../../models/focus_session_model.dart';
 import '../../../providers/focus_provider.dart';
+import '../../../services/security/pin_service.dart';
 import '../widgets/focus_timer.dart';
 import 'focus_pin_dialog.dart';
 
@@ -42,7 +43,12 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
     // Prevent screenshots/screen recording in strict mode.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _enforceStrictMode();
+      _refreshLockTaskStatus();
     });
+  }
+
+  Future<void> _refreshLockTaskStatus() async {
+    await ref.read(focusProvider.notifier).checkLockTaskAvailability();
   }
 
   @override
@@ -54,7 +60,7 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
       if (_callActive) {
         // Call still in progress — don't re-enter immersive mode.
@@ -63,7 +69,10 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
       final focus = ref.read(focusProvider);
       if (focus.isStrictActive) {
         // Reacquire Lock Task if the user is returning to PYLO after a call.
-        FocusChannel.enterLockTask();
+        final reacquired = await FocusChannel.enterLockTask();
+        if (!reacquired) {
+          await _refreshLockTaskStatus();
+        }
       }
       _enforceStrictMode();
     }
@@ -139,9 +148,17 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
     final isStrict = active.mode == FocusMode.strict;
 
     if (isStrict) {
-      // Strict mode: go directly to PIN entry. No confirmation dialog.
-      final pinValid = await FocusPinDialog.show(context, strict: true);
-      if (pinValid != true || !mounted) return;
+      // Strict mode: go directly to PIN entry when a PIN exists. Without a
+      // PIN there is nothing to verify — require only explicit confirmation
+      // so the user can never be locked out of ending the session.
+      if (await PinService.hasPin()) {
+        if (!mounted) return;
+        final pinValid = await FocusPinDialog.show(context, strict: true);
+        if (pinValid != true || !mounted) return;
+      } else {
+        final confirmed = await _showExitConfirmation();
+        if (confirmed != true || !mounted) return;
+      }
       await ref.read(focusProvider.notifier).stopSession();
       _navigateBack();
     } else {
@@ -249,6 +266,26 @@ class _FocusActiveScreenState extends ConsumerState<FocusActiveScreen>
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  if (isStrict && focus.lockTaskUnavailable) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        'Device lock is not active — focus keeps running but '
+                        'your phone is not pinned.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onErrorContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 48),
                   if (isStrict) ...[
                     // Strict mode: simple "End Focus" that opens PIN dialog.

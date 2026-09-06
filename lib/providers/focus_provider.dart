@@ -8,6 +8,7 @@ import '../models/focus_session_model.dart';
 import '../services/focus/focus_service.dart';
 import '../services/home_widget_service.dart';
 import '../services/security/pin_service.dart';
+import '../core/services/focus_channel.dart';
 import 'database_provider.dart';
 
 final focusServiceProvider = Provider<FocusService>((ref) => FocusService());
@@ -22,6 +23,11 @@ class FocusState {
   final bool isStrictMode;
   final bool isPaused;
 
+  /// True when a strict session is active but Android Lock Task could not be
+  /// entered (device/owner restrictions). Shown as a warning so the user is
+  /// not misled into believing the phone is pinned.
+  final bool lockTaskUnavailable;
+
   const FocusState({
     this.active,
     this.history = const [],
@@ -29,6 +35,7 @@ class FocusState {
     this.isLoading = true,
     this.isStrictMode = false,
     this.isPaused = false,
+    this.lockTaskUnavailable = false,
   });
 
   /// Whether the currently active focus session is in strict mode.
@@ -42,6 +49,7 @@ class FocusState {
     bool? isLoading,
     bool? isStrictMode,
     bool? isPaused,
+    bool? lockTaskUnavailable,
   }) {
     return FocusState(
       active: active == _clearActive ? this.active : active as ActiveFocus?,
@@ -50,6 +58,7 @@ class FocusState {
       isLoading: isLoading ?? this.isLoading,
       isStrictMode: isStrictMode ?? this.isStrictMode,
       isPaused: isPaused ?? this.isPaused,
+      lockTaskUnavailable: lockTaskUnavailable ?? this.lockTaskUnavailable,
     );
   }
 }
@@ -76,10 +85,25 @@ class FocusNotifier extends StateNotifier<FocusState> {
         isLoading: false,
       );
       if (active != null) _startTicker();
+      await checkLockTaskAvailability();
     } catch (e) {
       debugPrint('Focus restore failed: $e');
       state = state.copyWithState(isLoading: false);
     }
+  }
+
+  /// Re-evaluates whether Android Lock Task is actually holding the device
+  /// during a strict session and surfaces a warning when it is not.
+  Future<void> checkLockTaskAvailability() async {
+    final active = state.active;
+    if (active == null || active.mode != FocusMode.strict) {
+      if (state.lockTaskUnavailable) {
+        state = state.copyWithState(lockTaskUnavailable: false);
+      }
+      return;
+    }
+    final ok = await FocusChannel.isLockTaskActive();
+    state = state.copyWithState(lockTaskUnavailable: !ok);
   }
 
   Future<void> refreshHistory() async {
@@ -183,6 +207,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
       );
       _startTicker();
       _updateFocusWidget();
+      await checkLockTaskAvailability();
     } finally {
       _starting = false;
     }
@@ -197,7 +222,8 @@ class FocusNotifier extends StateNotifier<FocusState> {
     if (active == null) return;
     _ticker?.cancel();
     await _service.stopFocus(active, completed: false);
-    state = state.copyWithState(active: null, isPaused: false);
+    state =
+        state.copyWithState(active: null, isPaused: false, lockTaskUnavailable: false);
     _updateFocusWidget();
     await refreshHistory();
   }
@@ -207,7 +233,8 @@ class FocusNotifier extends StateNotifier<FocusState> {
     if (active == null) return;
     _ticker?.cancel();
     await _service.stopFocus(active, completed: true);
-    state = state.copyWithState(active: null, isPaused: false);
+    state =
+        state.copyWithState(active: null, isPaused: false, lockTaskUnavailable: false);
     _updateFocusWidget();
     await refreshHistory();
   }

@@ -19,7 +19,12 @@ class DatabaseHelper {
   static String? _cachedDbPath;
   static Completer<void>? _dbInitCompleter;
 
-  static const int schemaVersion = 9;
+  static const int schemaVersion = 10;
+
+  /// Test hook: when set, all database paths resolve here instead of the
+  /// production `taskflow.db`. Lets each parallel test isolate own a private
+  /// file, avoiding cross-isolate lock/cleanup races on one shared database.
+  static String? testDbPathOverride;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -44,7 +49,7 @@ class DatabaseHelper {
   Future<String> get databasePath async {
     if (_cachedDbPath == null) {
       final dbPath = await getDatabasesPath();
-      _cachedDbPath = p.join(dbPath, 'taskflow.db');
+      _cachedDbPath = testDbPathOverride ?? p.join(dbPath, 'taskflow.db');
     }
     return _cachedDbPath!;
   }
@@ -52,7 +57,7 @@ class DatabaseHelper {
   Future<Database> _initDB(String filePath) async {
     if (_cachedDbPath == null) {
       final dbPath = await getDatabasesPath();
-      _cachedDbPath = p.join(dbPath, filePath);
+      _cachedDbPath = testDbPathOverride ?? p.join(dbPath, 'taskflow.db');
     }
 
     return openDatabase(
@@ -141,6 +146,32 @@ class DatabaseHelper {
     }
     if (oldVersion < 9) {
       await _createV9Tables(db);
+    }
+    if (oldVersion < 10) {
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+      );
+      if (tables.isNotEmpty) {
+        final columns = await db.rawQuery('PRAGMA table_info(tasks)');
+        if (!columns.any((c) => c['name'] == 'repeatMonthday')) {
+          await db.execute(
+              'ALTER TABLE tasks ADD COLUMN repeatMonthday INTEGER DEFAULT NULL');
+        }
+        // Backfill the recurrence anchor (original day-of-month) from the
+        // current dueDate so existing monthly/yearly tasks stop drifting.
+        final rows = await db.query('tasks');
+        for (final row in rows) {
+          final due = row['dueDate'];
+          if (due is int && due > 0) {
+            await db.update(
+              'tasks',
+              {'repeatMonthday': DateTime.fromMillisecondsSinceEpoch(due).day},
+              where: 'id = ?',
+              whereArgs: [row['id']],
+            );
+          }
+        }
+      }
     }
     // Indexes must run AFTER every table exists: on upgrade paths the
     // checklist_items / focus_sessions tables are only created in v5.
@@ -337,6 +368,7 @@ class DatabaseHelper {
         reminderMinutes TEXT DEFAULT '[]',
         estimatedDuration TEXT,
         completedAt INTEGER,
+        repeatMonthday INTEGER,
         createdAt INTEGER,
         updatedAt INTEGER
       )

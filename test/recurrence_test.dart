@@ -61,6 +61,73 @@ void main() {
       expect(next.dueDate, DateTime(2026, 2, 15));
     });
 
+    test('monthly anchored day 31 never drifts after a short month', () {
+      // The original anchor (31) is stored separately from the clamped due
+      // date. Even after Feb 28, March must land back on the 31st.
+      final task = Task(
+        title: 'Pay rent',
+        category: 'Finance',
+        dueDate: DateTime(2026, 2, 28),
+        repeatMonthday: 31,
+        repeatRule: 'Monthly',
+      );
+
+      final next = task.nextOccurrence();
+      expect(next.dueDate, DateTime(2026, 3, 31));
+      // ...and the anchor carries forward so April 30 -> May 31 -> ...
+      expect(next.nextOccurrence().dueDate, DateTime(2026, 4, 30));
+      expect(next.nextOccurrence().nextOccurrence().dueDate,
+          DateTime(2026, 5, 31));
+    });
+
+    test('monthly anchored day 31 crosses the year boundary', () {
+      final task = Task(
+        title: 'Pay rent',
+        category: 'Finance',
+        dueDate: DateTime(2026, 12, 31),
+        repeatMonthday: 31,
+        repeatRule: 'Monthly',
+      );
+
+      final next = task.nextOccurrence();
+      expect(next.dueDate, DateTime(2027, 1, 31));
+    });
+
+    test('yearly anchored Feb 29 lands on Feb 28 outside leap years', () {
+      final task = Task(
+        title: 'Anniversary',
+        category: 'Personal',
+        dueDate: DateTime(2028, 2, 29),
+        repeatMonthday: 29,
+        repeatRule: 'Yearly',
+      );
+
+      // 2029 is not a leap year -> clamp to Feb 28 (never Mar 1).
+      final next = task.nextOccurrence();
+      expect(next.dueDate, DateTime(2029, 2, 28));
+      // The next occurrence keeps the anchor and fires again on Feb 29 in the
+      // next leap year (2032).
+      final after2029 = next.nextOccurrence();
+      expect(after2029.dueDate, DateTime(2030, 2, 28));
+      final after2030 = after2029.nextOccurrence();
+      expect(after2030.dueDate, DateTime(2031, 2, 28));
+      final after2031 = after2030.nextOccurrence();
+      expect(after2031.dueDate, DateTime(2032, 2, 29));
+    });
+
+    test('regenerate preserves the recurrence anchor', () {
+      final task = Task(
+        title: 'Pay rent',
+        category: 'Finance',
+        dueDate: DateTime(2026, 1, 31),
+        repeatMonthday: 31,
+        repeatRule: 'Monthly',
+      );
+
+      final next = task.regenerate();
+      expect(next.repeatMonthday, 31);
+    });
+
     test('monthly preserves time of day', () {
       final task = Task(
         title: 'Pay rent',

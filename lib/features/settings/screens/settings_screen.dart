@@ -115,9 +115,31 @@ class SettingsScreen extends ConsumerWidget {
                   title: const Text('Task reminders'),
                   subtitle: const Text('Enable local reminder support'),
                   value: prefs.notificationsEnabled,
-                  onChanged: (value) => ref
-                      .read(settingsPreferencesProvider.notifier)
-                      .setNotificationsEnabled(value),
+                  onChanged: (value) async {
+                    bool changed = false;
+                    try {
+                      await ref
+                          .read(settingsPreferencesProvider.notifier)
+                          .setNotificationsEnabled(value);
+                      changed = true;
+                    } catch (e) {
+                      debugPrint('Failed to update notification preference: $e');
+                    }
+                    if (!changed) return;
+                    if (value) {
+                      // Tasks added while reminders were off have no scheduled
+                      // notifications — schedule them all now.
+                      await ref
+                          .read(taskProvider.notifier)
+                          .rescheduleAllTaskReminders();
+                    } else if (!kIsWeb) {
+                      // Turning reminders OFF must withdraw pending task
+                      // notifications, not just flip a stored flag.
+                      await ref
+                          .read(taskProvider.notifier)
+                          .cancelAllTaskReminders();
+                    }
+                  },
                 ),
                 SwitchListTile.adaptive(
                   title: const Text('Birthday reminders'),
@@ -728,6 +750,13 @@ class SettingsScreen extends ConsumerWidget {
       // backed by prefs too; reload without re-locking an unlocked session.
       await ref.read(securityProvider.notifier).reloadAfterRestore();
       await ref.read(settingsProvider.notifier).ensureLoaded();
+
+      // Pending task reminders may have been part of the imported backup —
+      // re-arm them so the phone still nags about the restored tasks.
+      final restoredPrefs = ref.read(settingsPreferencesProvider);
+      if (restoredPrefs.notificationsEnabled && !kIsWeb) {
+        await ref.read(taskProvider.notifier).rescheduleAllTaskReminders();
+      }
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

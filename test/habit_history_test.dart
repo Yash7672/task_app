@@ -348,6 +348,78 @@ void main() {
     expect(migrated.first.completed, isTrue);
   });
 
+  test('v9 -> v10 migration adds repeatMonthday and backfills from dueDate',
+      () async {
+    final path = await DatabaseHelper.instance.databasePath;
+    await DatabaseHelper.instance.close();
+    await databaseFactory.deleteDatabase(path);
+
+    // Recreate the app at schema v9: a tasks table WITHOUT repeatMonthday.
+    final oldDb = await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 9,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE tasks (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              description TEXT,
+              category TEXT,
+              priority TEXT,
+              dueDate INTEGER,
+              startTime INTEGER,
+              endTime INTEGER,
+              isCompleted INTEGER DEFAULT 0,
+              isArchived INTEGER DEFAULT 0,
+              isDeleted INTEGER DEFAULT 0,
+              isFavorite INTEGER DEFAULT 0,
+              isPinned INTEGER DEFAULT 0,
+              notes TEXT,
+              repeatRule TEXT,
+              color TEXT,
+              checklist TEXT,
+              reminderMinutes TEXT DEFAULT '[]',
+              estimatedDuration TEXT,
+              completedAt INTEGER,
+              createdAt INTEGER,
+              updatedAt INTEGER
+            )
+          ''');
+          await db.insert('tasks', {
+            'id': 'legacy-task-31',
+            'title': 'Pay rent',
+            'category': 'Finance',
+            'dueDate': DateTime(2026, 1, 31, 9).millisecondsSinceEpoch,
+            'repeatRule': 'Monthly',
+            'createdAt': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+            'updatedAt': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          });
+          await db.insert('tasks', {
+            'id': 'legacy-task-15',
+            'title': 'Subscription',
+            'category': 'Finance',
+            'dueDate': DateTime(2026, 3, 15, 9).millisecondsSinceEpoch,
+            'repeatRule': 'Monthly',
+            'createdAt': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+            'updatedAt': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          });
+        },
+      ),
+    );
+    await oldDb.close();
+    await DatabaseHelper.instance.initDatabase();
+
+    // Backfill derived the anchor day from each task's original due date.
+    final task31 = await DatabaseHelper.instance.getTask('legacy-task-31');
+    expect(task31, isNotNull);
+    expect(task31!.repeatMonthday, 31);
+
+    final task15 = await DatabaseHelper.instance.getTask('legacy-task-15');
+    expect(task15, isNotNull);
+    expect(task15!.repeatMonthday, 15);
+  });
+
   group('streak history calendar UI', () {
     Future<void> pumpPopup(WidgetTester tester, Habit habit) async {
       await tester.pumpWidget(

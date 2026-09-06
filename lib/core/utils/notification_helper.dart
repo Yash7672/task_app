@@ -15,6 +15,11 @@ class NotificationHelper {
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
 
+  /// Upper bound on how many platform notifications one task may own. Must be
+  /// identical between the scheduling loop and cancelAllForTask so a
+  /// notification can never be scheduled that no cancel path can reach.
+  static const int maxReminders = 12;
+
   static const AndroidNotificationDetails _androidDetails =
       AndroidNotificationDetails(
     'taskflow_channel',
@@ -120,6 +125,7 @@ class NotificationHelper {
     if (kIsWeb) {
       return;
     }
+    await ensureInitialized();
     final now = DateTime.now();
     if (!scheduledDate.isAfter(now)) {
       debugPrint('Skipping reminder id=$id: $scheduledDate is in the past (now=$now)');
@@ -142,7 +148,24 @@ class NotificationHelper {
       );
       debugPrint('Scheduled reminder id=$id: "$body" at $scheduledDate');
     } catch (e) {
-      debugPrint('Failed to schedule reminder id=$id: $e');
+      // Exact alarms need the (separate) Alarms & reminders permission on
+      // Android 12+. If it was denied, fall back to an inexact schedule so
+      // reminders still fire instead of being silently dropped forever.
+      debugPrint('Exact schedule failed for id=$id ($e); retrying inexact');
+      try {
+        await _notifications.zonedSchedule(
+          safeId,
+          title,
+          body,
+          _toTZDate(scheduledDate),
+          _details(_androidDetails),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } catch (e2) {
+        debugPrint('Failed to schedule reminder id=$id: $e2');
+      }
     }
   }
 
@@ -156,8 +179,12 @@ class NotificationHelper {
       return;
     }
 
-    for (int i = 0; i < reminderMinutes.length; i++) {
-      final minutes = reminderMinutes[i];
+    await ensureInitialized();
+    final capped = reminderMinutes.length > maxReminders
+        ? reminderMinutes.sublist(0, maxReminders)
+        : reminderMinutes;
+    for (int i = 0; i < capped.length; i++) {
+      final minutes = capped[i];
       final scheduledDate = taskDateTime.subtract(Duration(minutes: minutes));
       final now = DateTime.now();
       if (!scheduledDate.isAfter(now)) {
@@ -184,7 +211,7 @@ class NotificationHelper {
     if (kIsWeb) {
       return;
     }
-    const maxReminders = 12;
+    await ensureInitialized();
     try {
       // Cancel all task reminder IDs concurrently.
       // Use consistent positive ID math matching scheduleTaskReminder.
@@ -210,8 +237,14 @@ class NotificationHelper {
     final now = DateTime.now();
     var scheduled = firstOccurrence;
     if (!scheduled.isAfter(now)) {
-      scheduled = DateTime(now.year + 1, firstOccurrence.month,
-          firstOccurrence.day, firstOccurrence.hour, firstOccurrence.minute);
+      final nextYear = now.year + 1;
+      // Clamp to the real last day of the target month/year. DateTime()
+      // would otherwise silently roll Feb 29 over to Mar 1, turning a
+      // Feb-29 birthday into a never-ending Mar-1 reminder.
+      final lastDay = DateTime(nextYear, firstOccurrence.month + 1, 0).day;
+      final safeDay = firstOccurrence.day.clamp(1, lastDay);
+      scheduled = DateTime(nextYear, firstOccurrence.month, safeDay,
+          firstOccurrence.hour, firstOccurrence.minute);
     }
 
     // Birthday IDs use an offset namespace to prevent collisions with task IDs.
@@ -231,7 +264,22 @@ class NotificationHelper {
       );
       debugPrint('Scheduled yearly reminder "$title" at $scheduled');
     } catch (e) {
-      debugPrint('Failed to schedule yearly reminder "$title": $e');
+      debugPrint('Exact yearly schedule failed for "$title" ($e); retrying inexact');
+      try {
+        await _notifications.zonedSchedule(
+          notificationId,
+          title,
+          body,
+          _toTZDate(scheduled),
+          _details(_birthdayDetails),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: DateTimeComponents.dateAndTime,
+        );
+      } catch (e2) {
+        debugPrint('Failed to schedule yearly reminder "$title": $e2');
+      }
     }
   }
 
@@ -246,6 +294,7 @@ class NotificationHelper {
     if (kIsWeb) {
       return;
     }
+    final now = DateTime.now();
 
     await cancelAllForBirthday(birthdayId);
 
@@ -268,6 +317,21 @@ class NotificationHelper {
               ? "🎂 $name's birthday is tomorrow! ($dateStr)"
               : "🎂 $name's birthday in $days days ($dateStr)";
 
+      // When the requested lead time has already passed but the birthday
+      // itself is still ahead, schedule on the birthday instead of letting
+      // scheduleYearlyReminder push the reminder a full year out (which would
+      // silently skip this whole cycle).
+      var firstOccurrence = reminderDate;
+      if (!firstOccurrence.isAfter(now)) {
+        firstOccurrence = DateTime(
+          nextBirthday.year,
+          nextBirthday.month,
+          nextBirthday.day,
+          reminderHour,
+          reminderMinute,
+        );
+      }
+
       // Stable id per (birthday, offset): re-scheduling overwrites the
       // previous year's notification instead of stacking a new one each
       // year, and cancelAllForBirthday can always find it.
@@ -277,7 +341,7 @@ class NotificationHelper {
         // with task reminder IDs that use raw hashCode.
         title: days == 0 ? 'Birthday Today 🎂' : 'Birthday Reminder 🎂',
         body: body,
-        firstOccurrence: reminderDate,
+        firstOccurrence: firstOccurrence,
       );
     }
   }
@@ -384,7 +448,22 @@ class NotificationHelper {
         matchDateTimeComponents: matchDateTimeComponents,
       );
     } catch (e) {
-      debugPrint('Failed to zonedSchedule id=$id: $e');
+      debugPrint('Exact zonedSchedule failed id=$id ($e); retrying inexact');
+      try {
+        await _notifications.zonedSchedule(
+          id,
+          title,
+          body,
+          scheduledDate,
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: matchDateTimeComponents,
+        );
+      } catch (e2) {
+        debugPrint('Failed to zonedSchedule id=$id: $e2');
+      }
     }
   }
 

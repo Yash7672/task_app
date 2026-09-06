@@ -44,7 +44,6 @@ class PyloProgressWidgetProvider : HomeWidgetProvider() {
                     setViewVisibility(R.id.widget_percent, View.VISIBLE)
                     setViewVisibility(R.id.widget_remaining, View.VISIBLE)
 
-                    setTextViewText(R.id.widget_counts, "Today's Progress")
                     setTextViewText(R.id.widget_percent, "$done / $total  \u2022  $percent%")
 
                     val remainingText = if (remaining == 1) {

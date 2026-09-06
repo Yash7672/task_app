@@ -57,17 +57,29 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   void _syncLockout() {
     final notifier = ref.read(securityProvider.notifier);
     final seconds = notifier.pinLockoutSecondsLeft;
-    if (seconds == _lockoutSecondsLeft) return;
-    setState(() => _lockoutSecondsLeft = seconds);
-    if (seconds > 0) {
-      _lockoutTicker ??=
-          Timer.periodic(const Duration(seconds: 1), (_) => _syncLockout());
-    } else {
+    if (seconds <= 0) {
+      // Lockout expired (or never started): always tear the ticker down and
+      // clear UI, even if the leftover flag says otherwise. This prevents a
+      // frozen "18 s" countdown and a misleading "0 s" message.
+      if (_lockoutSecondsLeft != 0 && mounted) {
+        setState(() => _lockoutSecondsLeft = 0);
+      }
       _lockoutTicker?.cancel();
       _lockoutTicker = null;
       if (_errorText != null && mounted) setState(() => _errorText = null);
+      return;
     }
+    if (seconds != _lockoutSecondsLeft) {
+      setState(() => _lockoutSecondsLeft = seconds);
+    }
+    // Start the ticker on the FIRST locked-out sync too (not only on later
+    // ones), otherwise a re-entered lockout never counts down.
+    _lockoutTicker ??=
+        Timer.periodic(const Duration(seconds: 1), (_) => _syncLockout());
   }
+
+  String _lockoutLabel(int seconds) =>
+      seconds > 0 ? '$seconds s' : 'a moment';
 
   Future<void> _loadBiometricIcon() async {
     final security = ref.read(securityProvider);
@@ -137,7 +149,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       setState(() => _errorText = null);
     } else if (notifier.isPinLockedOut) {
       setState(() => _errorText =
-          'Too many attempts. Try again in $_lockoutSecondsLeft s.');
+          'Too many attempts. Try again in ${_lockoutLabel(_lockoutSecondsLeft)}.');
       _syncLockout();
     } else {
       final left = _maxPinAttempts - notifier.pinFailedAttempts;
@@ -195,7 +207,8 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     final lockedOut = _lockoutSecondsLeft > 0;
     String? errorText = _errorText;
     if (lockedOut) {
-      errorText = 'Too many attempts. Try again in $_lockoutSecondsLeft s.';
+      errorText =
+          'Too many attempts. Try again in ${_lockoutLabel(_lockoutSecondsLeft)}.';
     }
 
     return Scaffold(

@@ -22,9 +22,20 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   final DatabaseHelper dbHelper;
   Timer? _midnightTimer;
 
-  /// Serializes list-appending mutations so two rapid calls can never both
-  /// read the same base list and silently drop each other's item from state.
-  Future<void>? _appendQueue;
+  /// Serializes ALL task mutations (add/update/delete/restore/archive/…) so
+  /// overlapping calls — e.g. swipe-delete followed by an immediate Undo —
+  /// run one after the other in deterministic FIFO order. Without this,
+  /// a delete and its undo could interleave their DB writes and their state
+  /// refreshes, and a restore could be lost (task never comes back).
+  Future<void>? _mutationQueue;
+
+  /// Enqueues [action] behind any in-flight mutation. Returns the action's
+  /// result, so callers can await the true completion of their operation.
+  Future<T> _runExclusive<T>(Future<T> Function() action) {
+    final result = (_mutationQueue ?? Future.value()).then((_) => action());
+    _mutationQueue = result.then<void>((_) {}, onError: (Object e, StackTrace st) {});
+    return result;
+  }
 
   TaskNotifier(this.dbHelper) : super(const AsyncValue.loading()) {
     loadTasks();
@@ -80,7 +91,7 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   }
 
   Future<void> addTask(Task task) async {
-    final run = (_appendQueue ?? Future.value()).then((_) async {
+    await _runExclusive(() async {
       try {
         await dbHelper.createTask(task);
         _updateState([..._currentTasks, task]);
@@ -89,54 +100,62 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
         rethrow;
       }
     });
-    _appendQueue = run.catchError((Object e) {
-      debugPrint('Append queue error (task): $e');
-    });
-    await run;
   }
 
   /// Returns true when the task was persisted AND reflected in state.
   Future<bool> updateTask(Task task) async {
-    try {
-      await dbHelper.updateTask(task);
-      final tasks = _currentTasks;
-      final index = tasks.indexWhere((t) => t.id == task.id);
-      if (index != -1) {
-        final updated = List<Task>.from(tasks);
-        updated[index] = task;
-        _updateState(updated);
+    return _runExclusive(() async {
+      try {
+        await dbHelper.updateTask(task);
+        final tasks = _currentTasks;
+        final index = tasks.indexWhere((t) => t.id == task.id);
+        if (index != -1) {
+          final updated = List<Task>.from(tasks);
+          updated[index] = task;
+          _updateState(updated);
+        }
+        return true;
+      } catch (e) {
+        debugPrint('Error updating task: $e');
+        return false;
       }
-      return true;
-    } catch (e) {
-      debugPrint('Error updating task: $e');
-      return false;
-    }
+    });
   }
 
   Future<void> archiveTask(String id) async {
-    final tasks = _currentTasks;
-    final index = tasks.indexWhere((t) => t.id == id);
-    if (index != -1) {
-      final updated = List<Task>.from(tasks);
-      updated.removeAt(index);
-      _updateState(updated);
-    }
-    try {
-      await dbHelper.archiveTask(id);
-      await NotificationHelper.cancelAllForTask(id);
-    } catch (e) {
-      debugPrint('Error archiving task: $e');
-      await loadTasks();
-    }
+    await _runExclusive(() async {
+      final tasks = _currentTasks;
+      final index = tasks.indexWhere((t) => t.id == id);
+      if (index != -1) {
+        final updated = List<Task>.from(tasks);
+        updated.removeAt(index);
+        _updateState(updated);
+      }
+      try {
+        await dbHelper.archiveTask(id);
+        await NotificationHelper.cancelAllForTask(id);
+      } catch (e) {
+        debugPrint('Error archiving task: $e');
+        await loadTasks();
+      }
+    });
   }
 
-  Future<void> restoreTask(String id) async {
-    try {
-      await dbHelper.restoreTask(id);
-      await loadTasks();
-    } catch (e) {
-      debugPrint('Error restoring task: $e');
-    }
+  /// Restores the exact soft-deleted task row (same id, all original fields)
+  /// and reloads state. Returns the restored Task, or null when it could not
+  /// be restored, so callers can reschedule reminders only on real success.
+  Future<Task?> restoreTask(String id) async {
+    Task? restored;
+    await _runExclusive(() async {
+      try {
+        await dbHelper.restoreTask(id);
+        restored = await dbHelper.getTask(id);
+        await loadTasks();
+      } catch (e) {
+        debugPrint('Error restoring task: $e');
+      }
+    });
+    return restored;
   }
 
   Future<void> restoreTaskFromModel(Task task) async {
@@ -144,30 +163,37 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   }
 
   Future<void> deleteTask(String id) async {
+    // Optimistic synchronous removal so the swiped-away Dismissible leaves
+    // the tree immediately (a Dismissible must be gone on the next frame).
     final tasks = _currentTasks;
     final index = tasks.indexWhere((t) => t.id == id);
     if (index != -1) {
-      final updated = List<Task>.from(tasks);
-      updated.removeAt(index);
-      _updateState(updated);
+      _updateState(List<Task>.from(tasks)..removeAt(index));
     }
-    try {
-      await dbHelper.deleteTask(id);
-      await NotificationHelper.cancelAllForTask(id);
-    } catch (e) {
-      debugPrint('Error deleting task: $e');
-      await loadTasks();
-    }
+    await _runExclusive(() async {
+      try {
+        await dbHelper.deleteTask(id);
+        await NotificationHelper.cancelAllForTask(id);
+      } catch (e) {
+        debugPrint('Error deleting task: $e');
+      } finally {
+        // Re-sync state with the DB so an interleaved reload (e.g. midnight
+        // refresh) can never resurrect the row that was just deleted.
+        await loadTasks();
+      }
+    });
   }
 
   Future<void> deleteTaskPermanently(String id) async {
-    try {
-      await dbHelper.deleteTaskPermanently(id);
-      await NotificationHelper.cancelAllForTask(id);
-      _updateState(_currentTasks.where((t) => t.id != id).toList());
-    } catch (e) {
-      debugPrint('Error permanently deleting task: $e');
-    }
+    await _runExclusive(() async {
+      try {
+        await dbHelper.deleteTaskPermanently(id);
+        await NotificationHelper.cancelAllForTask(id);
+        _updateState(_currentTasks.where((t) => t.id != id).toList());
+      } catch (e) {
+        debugPrint('Error permanently deleting task: $e');
+      }
+    });
   }
 
   Future<void> toggleTaskCompletion(Task task,
@@ -260,13 +286,52 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     await updateTask(task.copyWith(isPinned: !task.isPinned));
   }
 
-  Future<void> clearAllTasks() async {
-    try {
-      await dbHelper.clearTasks();
-      _updateState([]);
-    } catch (e) {
-      debugPrint('Error clearing tasks: $e');
+  /// Recreates pending notifications for every active (not completed, not
+  /// archived, not deleted) task that has reminders. Used on startup and
+  /// after the "Task reminders" master switch is turned on.
+  Future<void> rescheduleAllTaskReminders() async {
+    for (final task in _currentTasks) {
+      if (task.isCompleted || task.isArchived || task.isDeleted) continue;
+      if (task.reminderMinutes.isEmpty) continue;
+      try {
+        final taskDateTime = task.startTime ??
+            DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day,
+                9, 0);
+        await NotificationHelper.scheduleTaskReminders(
+          taskId: task.id,
+          taskTitle: task.title,
+          taskDateTime: taskDateTime,
+          reminderMinutes: task.reminderMinutes,
+        );
+      } catch (e) {
+        debugPrint('Failed to reschedule reminders for ${task.id}: $e');
+      }
     }
+  }
+
+  /// Withdraws every pending task notification. Used when the "Task
+  /// reminders" master switch is turned off.
+  Future<void> cancelAllTaskReminders() async {
+    for (final task in _currentTasks) {
+      if (task.isCompleted || task.isArchived || task.isDeleted) continue;
+      if (task.reminderMinutes.isEmpty) continue;
+      try {
+        await NotificationHelper.cancelAllForTask(task.id);
+      } catch (e) {
+        debugPrint('Failed to cancel reminders for ${task.id}: $e');
+      }
+    }
+  }
+
+  Future<void> clearAllTasks() async {
+    await _runExclusive(() async {
+      try {
+        await dbHelper.clearTasks();
+        _updateState([]);
+      } catch (e) {
+        debugPrint('Error clearing tasks: $e');
+      }
+    });
   }
 }
 
@@ -281,24 +346,22 @@ final allTasksProvider = Provider<List<Task>>((ref) {
 final todayTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   final now = DateTime.now();
-  final todayMs = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-  final endOfDayMs = DateTime(now.year, now.month, now.day, 23, 59, 59)
-      .millisecondsSinceEpoch;
+  final startOfDay = DateTime(now.year, now.month, now.day);
+  final startOfNextDay = DateTime(now.year, now.month, now.day + 1);
 
   return tasks.where((task) {
-    final dueMs = task.dueDate.millisecondsSinceEpoch;
-    return dueMs >= todayMs && dueMs <= endOfDayMs;
+    return !task.dueDate.isBefore(startOfDay) &&
+        task.dueDate.isBefore(startOfNextDay);
   }).toList();
 });
 
 final upcomingTasksProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   final now = DateTime.now();
-  final endOfTodayMs = DateTime(now.year, now.month, now.day, 23, 59, 59)
-      .millisecondsSinceEpoch;
+  final startOfNextDay = DateTime(now.year, now.month, now.day + 1);
 
   return tasks.where((task) {
-    return task.dueDate.millisecondsSinceEpoch > endOfTodayMs;
+    return !task.dueDate.isBefore(startOfNextDay);
   }).toList();
 });
 
@@ -821,7 +884,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       if (dates.isEmpty) {
         final updatedHabit = habit.copyWith(
           currentStreak: 0,
-          bestStreak: habit.bestStreak, // preserve all-time best
+          bestStreak: 0,
           lastCompletedDate: null,
           updatedAt: DateTime.now(),
         );
@@ -831,7 +894,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       }
 
       final today = _startOfDay(DateTime.now());
-      final yesterday = _startOfDay(DateTime.now().subtract(const Duration(days: 1)));
+      final yesterday = DateTime(today.year, today.month, today.day - 1);
 
       // Current streak: consecutive days ending at today or yesterday.
       int currentStreak = 0;
@@ -840,7 +903,7 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
         // Walk backwards from the latest date.
         currentStreak = 1;
         for (int i = dates.length - 1; i > 0; i--) {
-          final diff = dates[i].difference(dates[i - 1]).inDays;
+          final diff = _daysBetween(dates[i - 1], dates[i]);
           if (diff == 1) {
             currentStreak++;
           } else {
@@ -849,11 +912,12 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
         }
       }
 
-      // Best streak: longest consecutive run across all dates.
-      int bestStreak = habit.bestStreak; // preserve at least previous best
+      // Best streak: longest consecutive run across all dates, recomputed
+      // from the actual completion history.
+      int bestStreak = 0;
       int run = 1;
       for (int i = 1; i < dates.length; i++) {
-        final diff = dates[i].difference(dates[i - 1]).inDays;
+        final diff = _daysBetween(dates[i - 1], dates[i]);
         if (diff == 1) {
           run++;
         } else {
@@ -882,6 +946,15 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
     return DateTime(date.year, date.month, date.day);
   }
 
+  /// Calendar-day difference (DST-safe): compares date-only components as UTC
+  /// so a spring-forward/fall-back shift can never fold two consecutive days
+  /// into a "0-day" or "2-day" gap.
+  static int _daysBetween(DateTime a, DateTime b) {
+    final ua = DateTime.utc(a.year, a.month, a.day);
+    final ub = DateTime.utc(b.year, b.month, b.day);
+    return ub.difference(ua).inDays;
+  }
+
   /// Marks [date] as completed for [habitId] (historical streak control).
   ///
   /// If the date already has a completion record, this is a no-op.
@@ -896,6 +969,10 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
 
       await dbHelper.logHabitCompletion(habitId, dateKey);
       await _recalculateStreaks(habitId);
+      // Rebuild the day's completion snapshot from the (persisted) log items
+      // so the day-sheet and the complete-sheet keep showing the same data
+      // after a manual mark / unmark / remark cycle.
+      await _syncSnapshotForDate(habitId, date);
     } catch (e) {
       debugPrint('Error marking habit date: $e');
     }
@@ -910,6 +987,9 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
       final dateKey = habitDateKey(date);
       await dbHelper.removeHabitCompletion(habitId, dateKey);
       await _recalculateStreaks(habitId);
+      // Clear the day's snapshot too so unmarked days show "No checklist
+      // recorded" instead of stale items.
+      await dbHelper.saveCompletionChecklist(habitId, dateKey, []);
     } catch (e) {
       debugPrint('Error unmarking habit date: $e');
     }

@@ -30,19 +30,21 @@ class TaskListItem extends ConsumerWidget {
       ),
       direction: DismissDirection.endToStart,
       onDismissed: (_) {
-        NotificationHelper.cancelAllForTask(task.id);
         ref.read(taskProvider.notifier).deleteTask(task.id);
         messenger.showSnackBar(
           SnackBar(
             content: const Text('Task moved to trash'),
             action: SnackBarAction(
               label: 'Undo',
-              onPressed: () {
-                ref.read(taskProvider.notifier).restoreTask(task.id);
-                if (ref
-                    .read(settingsPreferencesProvider)
-                    .notificationsEnabled) {
-                  _scheduleReminderIfNeeded(task);
+              onPressed: () async {
+                final restored = await ref
+                    .read(taskProvider.notifier)
+                    .restoreTask(task.id);
+                if (restored != null &&
+                    ref
+                        .read(settingsPreferencesProvider)
+                        .notificationsEnabled) {
+                  _scheduleReminderIfNeeded(restored);
                 }
               },
             ),
@@ -149,7 +151,7 @@ class TaskListItem extends ConsumerWidget {
                   ],
                 ),
                 trailing: PopupMenuButton<String>(
-                  onSelected: (value) {
+                  onSelected: (value) async {
                     switch (value) {
                       case 'favorite':
                         ref.read(taskProvider.notifier).toggleFavorite(task);
@@ -158,11 +160,10 @@ class TaskListItem extends ConsumerWidget {
                         ref.read(taskProvider.notifier).togglePin(task);
                         break;
                       case 'archive':
-                        NotificationHelper.cancelAllForTask(task.id);
                         ref.read(taskProvider.notifier).archiveTask(task.id);
                         break;
                       case 'restore':
-                        ref
+                        await ref
                             .read(taskProvider.notifier)
                             .restoreTaskFromModel(task);
                         if (ref
@@ -244,7 +245,6 @@ class TaskListItem extends ConsumerWidget {
       ),
     );
     if (confirmed == true && context.mounted) {
-      NotificationHelper.cancelAllForTask(task.id);
       ref.read(taskProvider.notifier).deleteTaskPermanently(task.id);
     }
   }

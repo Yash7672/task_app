@@ -81,8 +81,7 @@ class BirthdaysScreen extends ConsumerWidget {
     final nameController = TextEditingController(text: birthday?.name ?? '');
     final phoneController = TextEditingController(text: birthday?.phone ?? '');
     final notesController = TextEditingController(text: birthday?.notes ?? '');
-    DateTime selectedDate =
-        birthday?.birthDate ?? DateTime(2000, 1, 1);
+    DateTime? selectedDate = birthday?.birthDate;
     List<int> selectedReminders =
         birthday != null ? List.from(birthday.reminderDaysBefore) : [0];
     int reminderHour = birthday?.reminderHour ?? 9;
@@ -118,17 +117,24 @@ class BirthdaysScreen extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.cake_outlined),
                   title: const Text('Birthday'),
-                  subtitle: Text(
-                      '${selectedDate.day} ${_monthName(selectedDate.month)} ${selectedDate.year}'),
+                  subtitle: Text(selectedDate == null
+                      ? 'Select date'
+                      : '${selectedDate!.day} ${_monthName(selectedDate!.month)} ${selectedDate!.year}'),
                   onTap: () async {
+                    final initial = selectedDate ?? DateTime.now();
                     final picked = await showDatePicker(
                       context: dialogContext,
-                      initialDate: selectedDate,
+                      initialDate: initial.isAfter(DateTime.now())
+                          ? DateTime.now()
+                          : initial,
                       firstDate: DateTime(1900),
                       lastDate: DateTime.now(),
                     );
                     if (picked != null) {
-                      setDialogState(() => selectedDate = picked);
+                      setDialogState(() {
+                        selectedDate = picked;
+                        validationError = null;
+                      });
                     }
                   },
                 ),
@@ -224,9 +230,32 @@ class BirthdaysScreen extends ConsumerWidget {
                   setDialogState(() => validationError = 'Name is required.');
                   return;
                 }
+                final pickedDate = selectedDate;
+                if (pickedDate == null) {
+                  setDialogState(() => validationError = 'Date is required.');
+                  return;
+                }
                 if (selectedReminders.isEmpty) {
                   setDialogState(() =>
                       validationError = 'Select at least one reminder.');
+                  return;
+                }
+                // Duplicate guard: same (case-insensitive) name AND same
+                // birth date already exists — excludes the entry being edited.
+                final existing = ref
+                    .read(birthdayProvider)
+                    .maybeWhen(data: (list) => list, orElse: () => <Birthday>[]);
+                final duplicate = existing.any((b) {
+                  if (birthday != null && b.id == birthday.id) return false;
+                  return b.name.trim().toLowerCase() ==
+                          nameController.text.trim().toLowerCase() &&
+                      b.birthDate.month == pickedDate.month &&
+                      b.birthDate.day == pickedDate.day;
+                });
+                if (duplicate) {
+                  setDialogState(() =>
+                      validationError = 'A birthday for this person on this '
+                          'date already exists.');
                   return;
                 }
                 Navigator.pop(
@@ -234,7 +263,7 @@ class BirthdaysScreen extends ConsumerWidget {
                   Birthday(
                     id: birthday?.id,
                     name: nameController.text.trim(),
-                    birthDate: selectedDate,
+                    birthDate: pickedDate,
                     phone: phoneController.text.trim(),
                     notes: notesController.text.trim(),
                     reminderDaysBefore: selectedReminders..sort(),

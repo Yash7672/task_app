@@ -14,6 +14,7 @@ import 'features/auth/screens/app_lock_screen.dart';
 import 'providers/birthday_provider.dart';
 import 'providers/preferences_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/task_provider.dart';
 import 'services/home_widget_service.dart';
 import 'theme/app_theme.dart';
 
@@ -76,6 +77,15 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp> {
         if (prefs.birthdayRemindersEnabled)
           ref.read(birthdayProvider.notifier).rescheduleAllReminders().catchError((e) {
             if (kDebugMode) debugPrint('Birthday reschedule failed: $e');
+          }),
+        if (prefs.notificationsEnabled)
+          ref
+              .read(taskProvider.notifier)
+              .loadTasks()
+              .then((_) =>
+                  ref.read(taskProvider.notifier).rescheduleAllTaskReminders())
+              .catchError((e) {
+            if (kDebugMode) debugPrint('Task reminder reschedule failed: $e');
           }),
         HomeWidgetService.init()
             .then((_) => HomeWidgetService.pushNow())

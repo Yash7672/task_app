@@ -15,7 +15,10 @@ extension DateExtension on DateTime {
   String toDisplayString() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    // Day-arithmetic via constructor (DateTime rolls month/year over), NOT
+    // add(Duration(days:1)) which is wrong across DST transitions and can
+    // land 'tomorrow' back on today.
+    final tomorrow = DateTime(today.year, today.month, today.day + 1);
     final checkDate = DateTime(year, month, day);
 
     if (checkDate == today) {
