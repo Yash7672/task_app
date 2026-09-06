@@ -56,8 +56,9 @@ class PyloProgressWidgetProvider : HomeWidgetProvider() {
                 } else {
                     setViewVisibility(R.id.widget_empty, View.VISIBLE)
                     setViewVisibility(R.id.widget_counts, View.GONE)
-                    setViewVisibility(R.id.widget_percent, View.GONE)
+                    setViewVisibility(R.id.widget_percent, View.VISIBLE)
                     setViewVisibility(R.id.widget_remaining, View.GONE)
+                    setTextViewText(R.id.widget_percent, "0 / 0")
                 }
             }
 

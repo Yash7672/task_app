@@ -50,16 +50,22 @@ class HomeWidgetService {
 
   // ── Task data ──────────────────────────────────────────────────────
 
+  /// True when [task] is due on the same local calendar date as [date].
+  /// The time-of-day component is deliberately ignored.
+  static bool isDueOn(Task task, DateTime date) {
+    if (task.isDeleted || task.isArchived) return false;
+    return task.dueDate.year == date.year &&
+        task.dueDate.month == date.month &&
+        task.dueDate.day == date.day;
+  }
+
+  /// Keeps only tasks whose due date is exactly the device's current local
+  /// calendar date. Future and past-day tasks are never shown.
   static void refreshTasks(List<Task> allTasks) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    _todayTasks = allTasks
-        .where((t) =>
-            !t.isDeleted &&
-            !t.isArchived &&
-            !today.isBefore(
-                DateTime(t.dueDate.year, t.dueDate.month, t.dueDate.day)))
-        .toList();
+    _todayTasks =
+        allTasks.where((task) => isDueOn(task, today)).toList();
     _scheduleFlush();
   }
 

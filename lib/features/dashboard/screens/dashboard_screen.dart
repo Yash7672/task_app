@@ -65,7 +65,6 @@ class DashboardScreen extends StatelessWidget {
             _StreakSummaryCard(),
             _StatsRow(),
             _FocusCard(),
-            _NeedsAttentionSection(),
             _BirthdaysSection(),
             _TodayTasksSection(),
             SizedBox(height: 80),
@@ -280,38 +279,6 @@ class _StatsRow extends ConsumerWidget {
           Text(title, style: theme.textTheme.bodySmall),
         ],
       ),
-    );
-  }
-}
-
-// ── Needs attention (watches overdueTasks + todayTasks) ──────────────
-
-class _NeedsAttentionSection extends ConsumerWidget {
-  const _NeedsAttentionSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final overdueTasks = ref.watch(overdueTasksProvider);
-    final todayTasks = ref.watch(todayTasksProvider);
-
-    final now = DateTime.now();
-    final needsAttention = [
-      ...overdueTasks,
-      ...todayTasks.where((t) =>
-          !t.isCompleted &&
-          t.startTime != null &&
-          t.startTime!.isAfter(now) &&
-          t.startTime!.difference(now).inHours <= 3),
-    ];
-
-    if (needsAttention.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(context, '⚠️ Needs Attention', needsAttention.length),
-        ...needsAttention.take(3).map((task) => TaskListItem(task: task)),
-      ],
     );
   }
 }
