@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppThemeMode { light, dark, amoled }
+enum AppThemeMode { light, dark, amoled, glass }
 
 class SettingsController extends StateNotifier<AppThemeMode> {
   SettingsController() : super(AppThemeMode.light) {
@@ -33,6 +33,8 @@ class SettingsController extends StateNotifier<AppThemeMode> {
         state = AppThemeMode.dark;
       } else if (stored == 'amoled') {
         state = AppThemeMode.amoled;
+      } else if (stored == 'glass') {
+        state = AppThemeMode.glass;
       } else {
         state = AppThemeMode.light;
       }

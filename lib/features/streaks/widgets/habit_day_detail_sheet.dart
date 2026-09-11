@@ -45,7 +45,6 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
   bool _isCompleted = false;
   bool _isProcessing = false;
   final _addController = TextEditingController();
-  final _editController = TextEditingController();
 
   @override
   void initState() {
@@ -56,7 +55,6 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
   @override
   void dispose() {
     _addController.dispose();
-    _editController.dispose();
     super.dispose();
   }
 
@@ -74,60 +72,59 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
   }
 
   Future<void> _loadItems() async {
+    if (!mounted) return;
     final dbHelper = ref.read(databaseProvider);
+    final notifier = ref.read(habitsProvider.notifier);
     final items = await dbHelper.getCompletionChecklist(
       widget.habit.id,
       _dateKey,
     );
+    if (!mounted) return;
     // Also check if there's a habit log entry for this date.
-    final completed = await ref
-        .read(habitsProvider.notifier)
-        .isCompletedOnDate(widget.habit.id, widget.day);
-    if (mounted) {
-      setState(() {
-        _items = items;
-        _isCompleted = completed;
-        _isLoading = false;
-      });
-    }
+    final completed =
+        await notifier.isCompletedOnDate(widget.habit.id, widget.day);
+    if (!mounted) return;
+    setState(() {
+      _items = items;
+      _isCompleted = completed;
+      _isLoading = false;
+    });
   }
 
   Future<void> _markAsStreak() async {
     if (_isProcessing) return;
     final messenger = ScaffoldMessenger.of(context);
+    final notifier = ref.read(habitsProvider.notifier);
     setState(() => _isProcessing = true);
-    await ref
-        .read(habitsProvider.notifier)
-        .markHabitDate(widget.habit.id, widget.day);
-    if (mounted) {
-      await _loadItems();
-      setState(() => _isProcessing = false);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Marked as streak for ${DateFormat('d MMM yyyy').format(widget.day)}'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
+    await notifier.markHabitDate(widget.habit.id, widget.day);
+    if (!mounted) return;
+    await _loadItems();
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Marked as streak for ${DateFormat('d MMM yyyy').format(widget.day)}'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   Future<void> _markAsMiss() async {
     if (_isProcessing) return;
     final messenger = ScaffoldMessenger.of(context);
+    final notifier = ref.read(habitsProvider.notifier);
     setState(() => _isProcessing = true);
-    await ref
-        .read(habitsProvider.notifier)
-        .unmarkHabitDate(widget.habit.id, widget.day);
-    if (mounted) {
-      await _loadItems();
-      setState(() => _isProcessing = false);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Removed streak for ${DateFormat('d MMM yyyy').format(widget.day)}'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
+    await notifier.unmarkHabitDate(widget.habit.id, widget.day);
+    if (!mounted) return;
+    await _loadItems();
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Removed streak for ${DateFormat('d MMM yyyy').format(widget.day)}'),
+        backgroundColor: Colors.orange,
+      ),
+    );
   }
 
   Future<void> _addItem() async {
@@ -144,38 +141,24 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
 
     final dbHelper = ref.read(databaseProvider);
     await dbHelper.addCompletionItem(item);
+    if (!mounted) return;
     _addController.clear();
+    if (!mounted) return;
     await _loadItems();
   }
 
   Future<void> _editItem(HabitCompletionItem item) async {
-    _editController.text = item.text;
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit item'),
-        content: TextField(
-          controller: _editController,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(labelText: 'Item text'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, _editController.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (context) => _EditItemDialog(initialText: item.text),
     );
     if (result != null && result.trim().isNotEmpty && result.trim() != item.text) {
+      if (!mounted) return;
       final dbHelper = ref.read(databaseProvider);
       await dbHelper.updateCompletionItem(
         item.copyWith(text: result.trim()),
       );
+      if (!mounted) return;
       await _loadItems();
     }
   }
@@ -199,8 +182,10 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
       ),
     );
     if (confirmed == true) {
+      if (!mounted) return;
       final dbHelper = ref.read(databaseProvider);
       await dbHelper.deleteCompletionItem(item.id);
+      if (!mounted) return;
       await _loadItems();
     }
   }
@@ -210,6 +195,7 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
     await dbHelper.updateCompletionItem(
       item.copyWith(completed: !item.completed),
     );
+    if (!mounted) return;
     await _loadItems();
   }
 
@@ -488,6 +474,57 @@ class _CompletionTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Edit-item dialog that owns its own [TextEditingController]. This keeps the
+/// controller lifecycle attached to the dialog route (not the bottom sheet)
+/// so dismissing the sheet while the dialog is open can never leave a
+/// disposed controller behind, and the sheet's state survives cleanly.
+class _EditItemDialog extends StatefulWidget {
+  const _EditItemDialog({required this.initialText});
+
+  final String initialText;
+
+  @override
+  State<_EditItemDialog> createState() => _EditItemDialogState();
+}
+
+class _EditItemDialogState extends State<_EditItemDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit item'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(labelText: 'Item text'),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

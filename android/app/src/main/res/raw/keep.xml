@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Alarm sounds are referenced at runtime only via string URIs
+  ('android.resource://com.example.task_app/raw/alarm_classic' etc.),
+  so the resource shrinker cannot detect them. Keep them explicitly.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/alarm_classic,@raw/alarm_marimba,@raw/alarm_gentle,@raw/alarm_digital,@raw/alarm_urgent" />

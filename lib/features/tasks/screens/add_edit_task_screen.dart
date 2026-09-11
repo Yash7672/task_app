@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/alarm_sound_service.dart';
 import '../../../core/utils/notification_helper.dart';
 import '../../../models/task_model.dart';
-import '../../../providers/database_provider.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../providers/task_provider.dart';
 
@@ -19,8 +19,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _descController;
-  late TextEditingController _notesController;
-  late TextEditingController _durationController;
   late TextEditingController _checklistController;
 
   String _selectedCategory = 'Personal';
@@ -28,9 +26,14 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   String _repeatRule = 'Never';
   DateTime _dueDate = DateTime.now();
   DateTime? _startTime;
-  DateTime? _endTime;
   List<int> _selectedReminders = [];
   List<ChecklistItemData> _checklist = [];
+  bool _alarmEnabled = false;
+  DateTime? _alarmTime;
+
+  /// Per-task alarm sound override (null = use the global Settings sound).
+  PyloAlarmSound? _alarmSound;
+  String? _customAlarmUri;
 
   final List<String> _priorities = [
     'Critical',
@@ -60,10 +63,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
         TextEditingController(text: widget.taskToEdit?.title ?? '');
     _descController =
         TextEditingController(text: widget.taskToEdit?.description ?? '');
-    _notesController =
-        TextEditingController(text: widget.taskToEdit?.notes ?? '');
-    _durationController =
-        TextEditingController(text: widget.taskToEdit?.estimatedDuration ?? '');
     _checklistController = TextEditingController();
     if (widget.taskToEdit != null) {
       _selectedCategory = widget.taskToEdit!.category;
@@ -71,9 +70,14 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       _repeatRule = widget.taskToEdit!.repeatRule;
       _dueDate = widget.taskToEdit!.dueDate;
       _startTime = widget.taskToEdit!.startTime;
-      _endTime = widget.taskToEdit!.endTime;
       _selectedReminders = List<int>.from(widget.taskToEdit!.reminderMinutes);
       _checklist = List<ChecklistItemData>.from(widget.taskToEdit!.checklist);
+      _alarmEnabled = widget.taskToEdit!.alarmEnabled;
+      _alarmTime = widget.taskToEdit!.alarmTime;
+      final storedSound = widget.taskToEdit!.alarmSound;
+      _alarmSound =
+          storedSound == null ? null : PyloAlarmSound.fromId(storedSound);
+      _customAlarmUri = widget.taskToEdit!.alarmSoundUri;
     } else {
       _selectedReminders = List<int>.from(
           ref.read(settingsPreferencesProvider).reminderMinutes);
@@ -84,8 +88,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
-    _notesController.dispose();
-    _durationController.dispose();
     _checklistController.dispose();
     super.dispose();
   }
@@ -100,38 +102,24 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     if (picked != null && mounted) {
       setState(() {
         _dueDate = picked;
-        // Re-anchor the chosen times onto the newly picked date so start/end
-        // never silently slide to yesterday/another date.
+        // Re-anchor the chosen start time onto the newly picked date so the
+        // task never silently slides to yesterday/another date.
         if (_startTime != null) {
           _startTime = DateTime(picked.year, picked.month, picked.day,
               _startTime!.hour, _startTime!.minute);
-        }
-        if (_endTime != null) {
-          _endTime = DateTime(picked.year, picked.month, picked.day,
-              _endTime!.hour, _endTime!.minute);
         }
       });
     }
   }
 
-  Future<void> _pickTime({required bool isStart}) async {
-    final initialTime = TimeOfDay.fromDateTime(isStart
-        ? (_startTime ?? DateTime.now())
-        : (_endTime ?? DateTime.now()));
+  Future<void> _pickStartTime() async {
+    final initialTime = TimeOfDay.fromDateTime(_startTime ?? DateTime.now());
     final picked =
         await showTimePicker(context: context, initialTime: initialTime);
     if (picked != null && mounted) {
-      final dateTime = DateTime(_dueDate.year, _dueDate.month, _dueDate.day,
-          picked.hour, picked.minute);
       setState(() {
-        if (isStart) {
-          _startTime = dateTime;
-          if (_endTime != null && _endTime!.isBefore(dateTime)) {
-            _endTime = dateTime.add(const Duration(hours: 1));
-          }
-        } else {
-          _endTime = dateTime;
-        }
+        _startTime = DateTime(_dueDate.year, _dueDate.month, _dueDate.day,
+            picked.hour, picked.minute);
       });
     }
   }
@@ -145,99 +133,14 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
     });
   }
 
-  Future<List<Task>> _findConflicts() async {
-    if (_startTime == null || _endTime == null) return [];
-    return ref.read(databaseProvider).getConflictingTasks(
-          start: _startTime!,
-          end: _endTime!,
-          excludeTaskId: widget.taskToEdit?.id,
-        );
-  }
-
-  Future<bool> _confirmConflict(List<Task> conflicts) async {
-    if (!mounted) return false;
-    final theme = Theme.of(context);
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Schedule conflict'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'This task overlaps with ${conflicts.length} timed task${conflicts.length > 1 ? 's' : ''}:',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 12),
-            ...conflicts.take(3).map((task) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.schedule, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${task.title} (${_timeRange(task)})',
-                          style: theme.textTheme.bodySmall,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Change Time'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Keep Anyway'),
-          ),
-        ],
-      ),
-    );
-    return result == true;
-  }
-
-  String _timeRange(Task task) {
-    if (task.startTime == null || task.endTime == null) return '';
-    String fmt(DateTime d) =>
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    return '${fmt(task.startTime!)}–${fmt(task.endTime!)}';
-  }
-
   Future<void> _saveTask() async {
     if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
-    if (_startTime != null &&
-        _endTime != null &&
-        _endTime!.isBefore(_startTime!)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('End time must be after the start time.')));
-      return;
-    }
-
     _saving = true;
     try {
-      final conflicts = await _findConflicts();
-      if (conflicts.isNotEmpty) {
-        final proceed = await _confirmConflict(conflicts);
-        if (!proceed) return;
-      }
-
       final isEditingCompleted = widget.taskToEdit?.isCompleted ?? false;
       final hasReminders = _selectedReminders.isNotEmpty &&
           ref.read(settingsPreferencesProvider).notificationsEnabled;
@@ -249,17 +152,27 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
         priority: _selectedPriority,
         dueDate: _dueDate,
         startTime: _startTime,
-        endTime: _endTime,
-        notes: _notesController.text.trim(),
+        endTime: null,
+        notes: '',
         repeatRule: _repeatRule,
         checklist: _checklist,
         reminderMinutes: _selectedReminders,
-        estimatedDuration: _durationController.text.trim(),
+        estimatedDuration: '',
+        alarmEnabled: _alarmEnabled,
+        alarmTime: _alarmEnabled ? _alarmTime : null,
         isCompleted: widget.taskToEdit?.isCompleted ?? false,
         isArchived: widget.taskToEdit?.isArchived ?? false,
         isDeleted: widget.taskToEdit?.isDeleted ?? false,
         isFavorite: widget.taskToEdit?.isFavorite ?? false,
         isPinned: widget.taskToEdit?.isPinned ?? false,
+        alarmSound: _alarmSound?.name,
+        alarmSoundType: _alarmSound == null
+            ? null
+            : (_alarmSound == PyloAlarmSound.custom ? 'custom' : 'builtin'),
+        alarmSoundUri:
+            _alarmSound == PyloAlarmSound.custom ? _customAlarmUri : null,
+        snoozeDuration: widget.taskToEdit?.snoozeDuration ?? 5,
+        vibrationEnabled: widget.taskToEdit?.vibrationEnabled ?? true,
         completedAt: widget.taskToEdit?.completedAt,
         createdAt: widget.taskToEdit?.createdAt,
         color: widget.taskToEdit?.color ?? '',
@@ -269,7 +182,15 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       );
 
       if (widget.taskToEdit != null) {
-        await NotificationHelper.cancelAllForTask(task.id);
+        // Cancel both the previously-saved and the newly-selected offsets so
+        // a reminder the user just removed can never keep firing.
+        await NotificationHelper.cancelAllForTask(
+          task.id,
+          reminderMinutes: [
+            ...?widget.taskToEdit?.reminderMinutes,
+            ..._selectedReminders,
+          ],
+        );
         await ref.read(taskProvider.notifier).updateTask(task);
       } else {
         await ref.read(taskProvider.notifier).addTask(task);
@@ -285,6 +206,16 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
           taskTitle: task.title,
           taskDateTime: taskDateTime,
           reminderMinutes: _selectedReminders,
+        );
+      }
+      if (_alarmEnabled && _alarmTime != null && !isEditingCompleted) {
+        await NotificationHelper.scheduleTaskAlarm(
+          taskId: task.id,
+          taskTitle: task.title,
+          alarmTime: _alarmTime!,
+          soundId: _alarmSound?.name,
+          customUri:
+              _alarmSound == PyloAlarmSound.custom ? _customAlarmUri : null,
         );
       }
 
@@ -418,16 +349,7 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                     ? 'Not set'
                     : '${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}'),
                 trailing: const Icon(Icons.access_time),
-                onTap: () => _pickTime(isStart: true),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('End Time'),
-                subtitle: Text(_endTime == null
-                    ? 'Not set'
-                    : '${_endTime!.hour.toString().padLeft(2, '0')}:${_endTime!.minute.toString().padLeft(2, '0')}'),
-                trailing: const Icon(Icons.access_time),
-                onTap: () => _pickTime(isStart: false),
+                onTap: () => _pickStartTime(),
               ),
               const SizedBox(height: 12),
               Text('Reminders (before task)',
@@ -505,19 +427,98 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                 },
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _durationController,
-                decoration: const InputDecoration(
-                    labelText: 'Estimated Duration',
-                    border: OutlineInputBorder()),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Alarm'),
+                subtitle: const Text('Play an alarm at a specific time'),
+                secondary: const Icon(Icons.alarm),
+                value: _alarmEnabled,
+                onChanged: (val) {
+                  setState(() {
+                    _alarmEnabled = val;
+                    if (val && _alarmTime == null) {
+                      final base = _startTime ??
+                          DateTime(
+                              _dueDate.year, _dueDate.month, _dueDate.day, 9, 0);
+                      _alarmTime = base;
+                    }
+                  });
+                },
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _notesController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                    labelText: 'Notes', border: OutlineInputBorder()),
-              ),
+              if (_alarmEnabled)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Alarm Time'),
+                  subtitle: Text(_alarmTime == null
+                      ? 'Not set'
+                      : '${_alarmTime!.hour.toString().padLeft(2, '0')}:${_alarmTime!.minute.toString().padLeft(2, '0')}'),
+                  trailing: const Icon(Icons.access_time),
+                  onTap: () async {
+                    final taskDateTime = _startTime ??
+                        DateTime(
+                            _dueDate.year, _dueDate.month, _dueDate.day, 9, 0);
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime:
+                          TimeOfDay.fromDateTime(_alarmTime ?? taskDateTime),
+                    );
+                    if (picked != null && mounted) {
+                      setState(() {
+                        _alarmTime = DateTime(
+                          _dueDate.year,
+                          _dueDate.month,
+                          _dueDate.day,
+                          picked.hour,
+                          picked.minute,
+                        );
+                      });
+                    }
+                  },
+                ),
+              if (_alarmEnabled)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Alarm Sound'),
+                  subtitle: Text(
+                    _alarmSound == null
+                        ? 'Default (use Settings)'
+                        : _alarmSound!.label,
+                  ),
+                  trailing: DropdownButton<PyloAlarmSound?>(
+                    value: _alarmSound,
+                    underline: const SizedBox.shrink(),
+                    items: [
+                      const DropdownMenuItem<PyloAlarmSound?>(
+                        value: null,
+                        child: Text('Default (use Settings)'),
+                      ),
+                      ...PyloAlarmSound.values.map(
+                        (sound) => DropdownMenuItem<PyloAlarmSound?>(
+                          value: sound,
+                          child: Text(sound.label),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      if (value == PyloAlarmSound.custom) {
+                        final uri =
+                            await AlarmSoundService.pickAndImportCustomSound();
+                        if (uri == null) return;
+                        if (!mounted) return;
+                        setState(() {
+                          _alarmSound = value;
+                          _customAlarmUri = uri;
+                        });
+                      } else {
+                        setState(() {
+                          _alarmSound = value;
+                          _customAlarmUri = null;
+                        });
+                      }
+                    },
+                  ),
+                ),
               const SizedBox(height: 12),
               Text('Checklist',
                   style: Theme.of(context).textTheme.titleSmall),

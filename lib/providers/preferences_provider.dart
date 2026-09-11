@@ -10,6 +10,20 @@ class SettingsPreferences {
   final int dailyReminderMinute;
   final bool birthdayRemindersEnabled;
 
+  /// Alarm sound id (`classic`, `marimba`, `gentle`, `digital`, `urgent`,
+  /// `custom`).  Kept as a plain string so Settings can render the list.
+  final String alarmSoundId;
+
+  /// `content://com.example.task_app.fileProvider/alarms/<file>` for the
+  /// user-picked alarm audio file (only used when [alarmSoundId] == 'custom').
+  final String? customAlarmUri;
+
+  /// Whether the alarm channel should vibrate while ringing.
+  final bool alarmVibrate;
+
+  /// How long the alarm's Snooze button postpones it, in minutes.
+  final int alarmSnoozeMinutes;
+
   SettingsPreferences({
     this.notificationsEnabled = true,
     this.birthdayRemindersEnabled = true,
@@ -17,6 +31,10 @@ class SettingsPreferences {
     this.dailyReminderEnabled = false,
     this.dailyReminderHour = 20,
     this.dailyReminderMinute = 0,
+    this.alarmSoundId = 'classic',
+    this.customAlarmUri,
+    this.alarmVibrate = true,
+    this.alarmSnoozeMinutes = 5,
   }) : reminderMinutes = reminderMinutes ?? const [5, 10];
 
   SettingsPreferences copyWith({
@@ -26,6 +44,10 @@ class SettingsPreferences {
     bool? dailyReminderEnabled,
     int? dailyReminderHour,
     int? dailyReminderMinute,
+    String? alarmSoundId,
+    String? customAlarmUri,
+    bool? alarmVibrate,
+    int? alarmSnoozeMinutes,
   }) {
     return SettingsPreferences(
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
@@ -36,6 +58,10 @@ class SettingsPreferences {
           dailyReminderEnabled ?? this.dailyReminderEnabled,
       dailyReminderHour: dailyReminderHour ?? this.dailyReminderHour,
       dailyReminderMinute: dailyReminderMinute ?? this.dailyReminderMinute,
+      alarmSoundId: alarmSoundId ?? this.alarmSoundId,
+      customAlarmUri: customAlarmUri ?? this.customAlarmUri,
+      alarmVibrate: alarmVibrate ?? this.alarmVibrate,
+      alarmSnoozeMinutes: alarmSnoozeMinutes ?? this.alarmSnoozeMinutes,
     );
   }
 }
@@ -78,6 +104,10 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
           prefs.getBool('daily_reminder_enabled') ?? false,
       dailyReminderHour: prefs.getInt('daily_reminder_hour') ?? 20,
       dailyReminderMinute: prefs.getInt('daily_reminder_minute') ?? 0,
+      alarmSoundId: prefs.getString('alarm_sound_id') ?? 'classic',
+      customAlarmUri: prefs.getString('custom_alarm_uri'),
+      alarmVibrate: prefs.getBool('alarm_vibrate') ?? true,
+      alarmSnoozeMinutes: prefs.getInt('alarm_snooze_minutes') ?? 5,
     );
   }
 
@@ -113,6 +143,34 @@ class SettingsPreferencesNotifier extends StateNotifier<SettingsPreferences> {
     );
     await prefs.setInt('daily_reminder_hour', hour);
     await prefs.setInt('daily_reminder_minute', minute);
+  }
+
+  Future<void> setAlarmSoundId(String soundId) async {
+    final prefs = await _getPrefs();
+    state = state.copyWith(alarmSoundId: soundId);
+    await prefs.setString('alarm_sound_id', soundId);
+  }
+
+  Future<void> setCustomAlarmUri(String? uri) async {
+    final prefs = await _getPrefs();
+    state = state.copyWith(customAlarmUri: uri);
+    if (uri == null) {
+      await prefs.remove('custom_alarm_uri');
+    } else {
+      await prefs.setString('custom_alarm_uri', uri);
+    }
+  }
+
+  Future<void> setAlarmVibrate(bool vibrate) async {
+    final prefs = await _getPrefs();
+    state = state.copyWith(alarmVibrate: vibrate);
+    await prefs.setBool('alarm_vibrate', vibrate);
+  }
+
+  Future<void> setAlarmSnoozeMinutes(int minutes) async {
+    final prefs = await _getPrefs();
+    state = state.copyWith(alarmSnoozeMinutes: minutes);
+    await prefs.setInt('alarm_snooze_minutes', minutes);
   }
 }
 

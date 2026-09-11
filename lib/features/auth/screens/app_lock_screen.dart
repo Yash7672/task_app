@@ -104,6 +104,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
         security.onAppPaused();
+        break;
       case AppLifecycleState.resumed:
         security.onAppResumed();
         if (ref.read(securityProvider).requiresAuth) {

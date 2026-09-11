@@ -73,6 +73,22 @@ class FocusChannel {
     }
   }
 
+  /// Keeps the display awake while a full-screen alarm is ringing so the
+  /// screen can never time out mid-alarm.
+  static Future<bool> setKeepScreenOn(bool enabled) async {
+    if (!_isAndroid) return false;
+    try {
+      final result = await _channel.invokeMethod<bool>(
+        'setKeepScreenOn',
+        {'enabled': enabled},
+      );
+      return result ?? false;
+    } catch (e) {
+      debugPrint('FocusChannel.setKeepScreenOn failed: $e');
+      return false;
+    }
+  }
+
   static Future<bool> requestPhoneStatePermission() async {
     if (!_isAndroid) return false;
     try {

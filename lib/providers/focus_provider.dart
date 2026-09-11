@@ -228,15 +228,25 @@ class FocusNotifier extends StateNotifier<FocusState> {
     await refreshHistory();
   }
 
+  bool _completing = false;
+
+  /// Finalizes the active focus session. Deduplicates concurrent invocations
+  /// (a double-tap on "Done", or a timer-end racing a manual completion) so
+  /// the finished session is finalized and persisted exactly once.
   Future<void> completeSession() async {
     final active = state.active;
-    if (active == null) return;
+    if (active == null || _completing) return;
+    _completing = true;
     _ticker?.cancel();
-    await _service.stopFocus(active, completed: true);
-    state =
-        state.copyWithState(active: null, isPaused: false, lockTaskUnavailable: false);
-    _updateFocusWidget();
-    await refreshHistory();
+    try {
+      await _service.stopFocus(active, completed: true);
+      state = state.copyWithState(
+          active: null, isPaused: false, lockTaskUnavailable: false);
+      _updateFocusWidget();
+      await refreshHistory();
+    } finally {
+      _completing = false;
+    }
   }
 
   @override

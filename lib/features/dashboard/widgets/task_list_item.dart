@@ -54,175 +54,212 @@ class TaskListItem extends ConsumerWidget {
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
-          children: [
-            Container(
-              width: 5,
-              height: 96,
-              decoration: BoxDecoration(
-                color: priorityColor,
-                borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    bottomLeft: Radius.circular(16)),
+            children: [
+              Container(
+                width: 5,
+                height: 96,
+                decoration: BoxDecoration(
+                  color: priorityColor,
+                  borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      bottomLeft: Radius.circular(16)),
+                ),
               ),
-            ),
-            Expanded(
-              child: ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: Transform.scale(
-                  scale: 1.2,
-                  child: Checkbox(
-                    value: task.isCompleted,
-                    shape: const CircleBorder(),
-                    activeColor: theme.colorScheme.primary,
-                    onChanged: (_) => ref
-                        .read(taskProvider.notifier)
-                        .toggleTaskCompletion(
-                          task,
-                          notificationsEnabled: ref
-                              .read(settingsPreferencesProvider)
-                              .notificationsEnabled,
-                        ),
+              Expanded(
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Transform.scale(
+                    scale: 1.2,
+                    child: Checkbox(
+                      value: task.isCompleted,
+                      shape: const CircleBorder(),
+                      activeColor: theme.colorScheme.primary,
+                      onChanged: (_) => ref
+                          .read(taskProvider.notifier)
+                          .toggleTaskCompletion(
+                            task,
+                            notificationsEnabled: ref
+                                .read(settingsPreferencesProvider)
+                                .notificationsEnabled,
+                          ),
+                    ),
                   ),
-                ),
-                title: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        task.title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          decoration: task.isCompleted
-                              ? TextDecoration.lineThrough
-                              : null,
-                          color: task.isCompleted ? Colors.grey : null,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (task.isPinned)
-                      const Icon(Icons.push_pin,
-                          size: 16, color: Colors.orange),
-                    if (task.isFavorite)
-                      const Icon(Icons.star, size: 16, color: Colors.amber),
-                  ],
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (task.description.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
+                  title: Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          task.description,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                              color: task.isCompleted
-                                  ? Colors.grey
-                                  : Colors.grey[600]),
+                          task.title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : null,
+                            color: task.isCompleted ? Colors.grey : null,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: categoryColor.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                      if (task.isPinned)
+                        const Icon(Icons.push_pin,
+                            size: 16, color: Colors.orange),
+                      if (task.isFavorite)
+                        const Icon(Icons.star, size: 16, color: Colors.amber),
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (task.description.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
                           child: Text(
-                            task.category,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: categoryColor,
-                                fontWeight: FontWeight.bold),
+                            task.description,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: task.isCompleted
+                                    ? Colors.grey
+                                    : Colors.grey[600]),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Icon(Icons.calendar_today,
-                            size: 12, color: Colors.grey[500]),
-                        const SizedBox(width: 4),
-                        Text(task.dueDate.toDisplayString(),
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: Colors.grey[500])),
-                      ],
-                    ),
-                  ],
-                ),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'favorite':
-                        ref.read(taskProvider.notifier).toggleFavorite(task);
-                        break;
-                      case 'pin':
-                        ref.read(taskProvider.notifier).togglePin(task);
-                        break;
-                      case 'archive':
-                        ref.read(taskProvider.notifier).archiveTask(task.id);
-                        break;
-                      case 'restore':
-                        await ref
-                            .read(taskProvider.notifier)
-                            .restoreTaskFromModel(task);
-                        if (ref
-                            .read(settingsPreferencesProvider)
-                            .notificationsEnabled) {
-                          _scheduleReminderIfNeeded(task);
-                        }
-                        break;
-                      case 'delete':
-                        _confirmPermanentDelete(context, task, ref);
-                        break;
-                      default:
-                        break;
-                    }
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: categoryColor.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              task.category,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                  color: categoryColor,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.calendar_today,
+                              size: 12, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Text(task.dueDate.toDisplayString(),
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: Colors.grey[500])),
+                          if (task.alarmEnabled && task.alarmTime != null) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Icons.alarm,
+                                size: 12, color: Colors.deepOrange),
+                            const SizedBox(width: 2),
+                            Text(
+                              _alarmTimeLabel(task.alarmTime!),
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: Colors.deepOrange),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      switch (value) {
+                        case 'favorite':
+                          ref.read(taskProvider.notifier).toggleFavorite(task);
+                          break;
+                        case 'pin':
+                          ref.read(taskProvider.notifier).togglePin(task);
+                          break;
+                        case 'archive':
+                          ref.read(taskProvider.notifier).archiveTask(task.id);
+                          break;
+                        case 'restore':
+                          await ref
+                              .read(taskProvider.notifier)
+                              .restoreTaskFromModel(task);
+                          if (ref
+                              .read(settingsPreferencesProvider)
+                              .notificationsEnabled) {
+                            _scheduleReminderIfNeeded(task);
+                          }
+                          break;
+                        case 'delete':
+                          _confirmPermanentDelete(context, task, ref);
+                          break;
+                        default:
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) {
+                      final items = <PopupMenuEntry<String>>[];
+                      items.add(PopupMenuItem(
+                          value: 'favorite',
+                          child: Text(task.isFavorite
+                              ? 'Remove favorite'
+                              : 'Favorite')));
+                      items.add(PopupMenuItem(
+                          value: 'pin',
+                          child: Text(task.isPinned ? 'Unpin' : 'Pin')));
+                      if (task.isArchived || task.isDeleted) {
+                        items.add(const PopupMenuItem(
+                            value: 'restore', child: Text('Restore')));
+                        items.add(const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Delete permanently')));
+                      } else {
+                        items.add(const PopupMenuItem(
+                            value: 'archive', child: Text('Archive')));
+                      }
+                      return items;
+                    },
+                  ),
+                  onTap: () {
+                    _showTaskDetails(context, task, ref);
                   },
-                  itemBuilder: (context) {
-                    final items = <PopupMenuEntry<String>>[];
-                    items.add(PopupMenuItem(
-                        value: 'favorite',
-                        child: Text(
-                            task.isFavorite ? 'Remove favorite' : 'Favorite')));
-                    items.add(PopupMenuItem(
-                        value: 'pin',
-                        child: Text(task.isPinned ? 'Unpin' : 'Pin')));
-                    if (task.isArchived || task.isDeleted) {
-                      items.add(const PopupMenuItem(
-                          value: 'restore', child: Text('Restore')));
-                      items.add(const PopupMenuItem(
-                          value: 'delete', child: Text('Delete permanently')));
-                    } else {
-                      items.add(const PopupMenuItem(
-                          value: 'archive', child: Text('Archive')));
-                    }
-                    return items;
-                  },
                 ),
-                onTap: () {
-                  _showTaskDetails(context, task, ref);
-                },
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
   }
 
   void _scheduleReminderIfNeeded(Task task) {
-    if (task.reminderMinutes.isEmpty) {
-      return;
-    }
     final taskDateTime = task.startTime ??
         DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day, 9, 0);
-    NotificationHelper.scheduleTaskReminders(
-      taskId: task.id,
-      taskTitle: task.title,
-      taskDateTime: taskDateTime,
-      reminderMinutes: task.reminderMinutes,
-    );
+    if (task.reminderMinutes.isNotEmpty) {
+      NotificationHelper.scheduleTaskReminders(
+        taskId: task.id,
+        taskTitle: task.title,
+        taskDateTime: taskDateTime,
+        reminderMinutes: task.reminderMinutes,
+      );
+    }
+    if (task.alarmEnabled && task.alarmTime != null) {
+      NotificationHelper.scheduleTaskAlarm(
+        taskId: task.id,
+        taskTitle: task.title,
+        alarmTime: task.alarmTime!,
+        soundId: task.alarmSound,
+        customUri: task.alarmSoundUri,
+      );
+    }
+  }
+
+  String _alarmTimeLabel(DateTime alarmTime) {
+    final h = alarmTime.hour.toString().padLeft(2, '0');
+    final m = alarmTime.minute.toString().padLeft(2, '0');
+    final day = DateTime(alarmTime.year, alarmTime.month, alarmTime.day);
+    final today = DateTime.now();
+    final t = DateTime(today.year, today.month, today.day);
+    final delta = day.difference(t).inDays;
+    final when = switch (delta) {
+      0 => 'Today',
+      1 => 'Tomorrow',
+      _ =>
+        '${alarmTime.day}/${alarmTime.month}',
+    };
+    return '$when $h:$m';
   }
 
   Future<void> _confirmPermanentDelete(

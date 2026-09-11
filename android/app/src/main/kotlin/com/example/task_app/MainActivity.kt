@@ -53,6 +53,11 @@ class MainActivity : FlutterFragmentActivity() {
                         setLockScreenFlags(enabled)
                         result.success(true)
                     }
+                    "setKeepScreenOn" -> {
+                        val enabled = call.argument<Boolean>("enabled") ?: false
+                        setKeepScreenOn(enabled)
+                        result.success(true)
+                    }
                     "requestPhoneStatePermission" -> {
                         result.success(requestPhoneStatePermission())
                     }
@@ -224,6 +229,19 @@ class MainActivity : FlutterFragmentActivity() {
                         WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                     )
                 }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /// Keeps the screen fully on while a full-screen alarm is displayed so an
+    /// active alarm can never let the display time out mid-ring.
+    private fun setKeepScreenOn(enabled: Boolean) {
+        try {
+            if (enabled) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         } catch (_: Exception) {
         }

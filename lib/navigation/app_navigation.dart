@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/widgets/glass_components.dart';
+import '../theme/glass_depth.dart';
 import '../features/calendar/screens/calendar_screen.dart';
 import '../features/checklist/screens/checklist_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
@@ -56,41 +58,84 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       return const SizedBox.shrink();
     }
 
+    final isGlass = isGlassTheme(context);
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: _screens,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard),
-              label: 'Home'),
-          NavigationDestination(
-              icon: Icon(Icons.list_alt_outlined),
-              selectedIcon: Icon(Icons.list_alt),
-              label: 'Tasks'),
-          NavigationDestination(
-              icon: Icon(Icons.calendar_month_outlined),
-              selectedIcon: Icon(Icons.calendar_month),
-              label: 'Calendar'),
-          NavigationDestination(
-              icon: Icon(Icons.local_fire_department_outlined),
-              selectedIcon: Icon(Icons.local_fire_department),
-              label: 'Habits'),
-          NavigationDestination(
-              icon: Icon(Icons.checklist_rounded),
-              selectedIcon: Icon(Icons.checklist),
-              label: 'Lists'),
-          NavigationDestination(
-              icon: Icon(Icons.apps_outlined),
-              selectedIcon: Icon(Icons.apps),
-              label: 'More'),
-        ],
-      ),
+      bottomNavigationBar: isGlass
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: GlassSurface(
+                borderRadius: 24,
+                depth: GlassDepth.level3,
+                blur: 18,
+                child: NavigationBar(
+                  selectedIndex: _currentIndex,
+                  onDestinationSelected: (index) =>
+                      setState(() => _currentIndex = index),
+                  destinations: const [
+                    NavigationDestination(
+                        icon: Icon(Icons.dashboard_outlined),
+                        selectedIcon: Icon(Icons.dashboard),
+                        label: 'Home'),
+                    NavigationDestination(
+                        icon: Icon(Icons.list_alt_outlined),
+                        selectedIcon: Icon(Icons.list_alt),
+                        label: 'Tasks'),
+                    NavigationDestination(
+                        icon: Icon(Icons.calendar_month_outlined),
+                        selectedIcon: Icon(Icons.calendar_month),
+                        label: 'Calendar'),
+                    NavigationDestination(
+                        icon: Icon(Icons.local_fire_department_outlined),
+                        selectedIcon: Icon(Icons.local_fire_department),
+                        label: 'Habits'),
+                    NavigationDestination(
+                        icon: Icon(Icons.checklist_rounded),
+                        selectedIcon: Icon(Icons.checklist),
+                        label: 'Lists'),
+                    NavigationDestination(
+                        icon: Icon(Icons.apps_outlined),
+                        selectedIcon: Icon(Icons.apps),
+                        label: 'More'),
+                  ],
+                ),
+              ),
+            )
+          : NavigationBar(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: (index) =>
+                  setState(() => _currentIndex = index),
+              destinations: const [
+                NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard),
+                    label: 'Home'),
+                NavigationDestination(
+                    icon: Icon(Icons.list_alt_outlined),
+                    selectedIcon: Icon(Icons.list_alt),
+                    label: 'Tasks'),
+                NavigationDestination(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    selectedIcon: Icon(Icons.calendar_month),
+                    label: 'Calendar'),
+                NavigationDestination(
+                    icon: Icon(Icons.local_fire_department_outlined),
+                    selectedIcon: Icon(Icons.local_fire_department),
+                    label: 'Habits'),
+                NavigationDestination(
+                    icon: Icon(Icons.checklist_rounded),
+                    selectedIcon: Icon(Icons.checklist),
+                    label: 'Lists'),
+                NavigationDestination(
+                    icon: Icon(Icons.apps_outlined),
+                    selectedIcon: Icon(Icons.apps),
+                    label: 'More'),
+              ],
+            ),
     );
   }
 }

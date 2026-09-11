@@ -3,9 +3,11 @@ package com.example.task_app
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 import androidx.annotation.Keep
+import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 
@@ -45,22 +47,75 @@ class PyloHomeWidgetProvider : HomeWidgetProvider() {
                     setViewVisibility(R.id.widget_progress, View.GONE)
                 }
 
-                // Tasks - bullet list, no checkboxes
-                val taskViews = intArrayOf(
+                // Tasks — each row has a checkbox ImageView + title TextView.
+                // The checkbox sends a broadcast to toggle completion; tapping
+                // the row itself opens the app.
+                val taskViewIds = intArrayOf(
                     R.id.widget_task_0,
                     R.id.widget_task_1,
                     R.id.widget_task_2,
                     R.id.widget_task_3,
                     R.id.widget_task_4
                 )
+                val checkboxIds = intArrayOf(
+                    R.id.widget_checkbox_0,
+                    R.id.widget_checkbox_1,
+                    R.id.widget_checkbox_2,
+                    R.id.widget_checkbox_3,
+                    R.id.widget_checkbox_4
+                )
+                val rowIds = intArrayOf(
+                    R.id.widget_row_0,
+                    R.id.widget_row_1,
+                    R.id.widget_row_2,
+                    R.id.widget_row_3,
+                    R.id.widget_row_4
+                )
 
-                for ((index, taskViewId) in taskViews.withIndex()) {
-                    val title = widgetData.getString("tasks_title_$index", null)
+                for (i in taskViewIds.indices) {
+                    val title = widgetData.getString("tasks_title_$i", null)
+                    val taskId = widgetData.getString("tasks_id_$i", null)
+                    val isCompleted = widgetData.getBoolean("tasks_done_$i", false)
+
                     if (title.isNullOrEmpty()) {
-                        setViewVisibility(taskViewId, View.GONE)
+                        setViewVisibility(rowIds[i], View.GONE)
                     } else {
-                        setViewVisibility(taskViewId, View.VISIBLE)
-                        setTextViewText(taskViewId, "\u2022 $title")
+                        setViewVisibility(rowIds[i], View.VISIBLE)
+                        setTextViewText(taskViewIds[i], title)
+
+                        // Strikethrough for completed tasks.
+                        if (isCompleted) {
+                            // Apply strikethrough via RemoteViews (setPaintFlags is not
+                            // available, so we use a style change approach).
+                            setTextViewText(taskViewIds[i], "\u2714 $title")
+                        } else {
+                            setTextViewText(taskViewIds[i], title)
+                        }
+
+                        // Checkbox icon
+                        val checkboxRes = if (isCompleted)
+                            R.drawable.widget_checkbox_checked
+                        else
+                            R.drawable.widget_checkbox_unchecked
+                        setImageViewResource(checkboxIds[i], checkboxRes)
+
+                        // Wire the checkbox tap to the background interactivity
+                        // receiver so the Dart callback toggles the task.
+                        if (!taskId.isNullOrEmpty() && !isCompleted) {
+                            val uri = Uri.Builder()
+                                .scheme("pylo")
+                                .authority("complete_task")
+                                .appendQueryParameter("id", taskId)
+                                .appendQueryParameter("index", i.toString())
+                                .build()
+                            val broadcastIntent = HomeWidgetBackgroundIntent.getBroadcast(
+                                context, uri
+                            )
+                            setOnClickPendingIntent(checkboxIds[i], broadcastIntent)
+                        } else {
+                            // Already completed — tap does nothing (no pending intent).
+                            setOnClickPendingIntent(checkboxIds[i], null)
+                        }
                     }
                 }
 

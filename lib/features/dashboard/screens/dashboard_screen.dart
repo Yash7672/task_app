@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/task_model.dart';
-import '../../../providers/birthday_provider.dart';
 import '../../../providers/focus_provider.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
+import '../../../theme/glass_depth.dart';
 import '../../focus/screens/focus_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../settings/screens/settings_screen.dart';
@@ -63,9 +65,7 @@ class DashboardScreen extends StatelessWidget {
           children: [
             _GreetingHeader(),
             _StreakSummaryCard(),
-            _StatsRow(),
             _FocusCard(),
-            _BirthdaysSection(),
             _TodayTasksSection(),
             SizedBox(height: 80),
           ],
@@ -120,40 +120,43 @@ class _GreetingHeader extends ConsumerWidget {
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: Colors.grey[600])),
           const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Daily progress',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
-                    Text('$completedCount of ${todayTasks.length} done',
-                        style: theme.textTheme.bodySmall),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: progress / 100,
-                    minHeight: 10,
-                    backgroundColor:
-                        theme.colorScheme.surface.withValues(alpha: 0.5),
+          _glassWrap(
+            context,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Daily progress',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      Text('$completedCount of ${todayTasks.length} done',
+                          style: theme.textTheme.bodySmall),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text('$progress% complete',
-                    style: theme.textTheme.bodyMedium),
-              ],
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress / 100,
+                      minHeight: 10,
+                      backgroundColor:
+                          theme.colorScheme.surface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('$progress% complete',
+                      style: theme.textTheme.bodyMedium),
+                ],
+              ),
             ),
           ),
         ],
@@ -174,20 +177,11 @@ class _StreakSummaryCard extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Container(
-        width: double.infinity,
+      child: GlassSurface(
+        borderRadius: 16,
+        depth: GlassDepth.level1,
+        blur: 0,
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              theme.colorScheme.primaryContainer,
-              theme.colorScheme.secondaryContainer,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -230,58 +224,7 @@ class _StreakSummaryCard extends ConsumerWidget {
   }
 }
 
-// ── Stats row (watches todayTasks + overdueTasks + favorites) ────────
 
-class _StatsRow extends ConsumerWidget {
-  const _StatsRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final todayTasks = ref.watch(todayTasksProvider);
-    final overdueTasks = ref.watch(overdueTasksProvider);
-    final favorites = ref.watch(favoritesProvider);
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Expanded(
-              child: _statCard(theme, 'Today', '${todayTasks.length}', Icons.today)),
-          const SizedBox(width: 8),
-          Expanded(
-              child: _statCard(theme, 'Overdue', '${overdueTasks.length}',
-                  Icons.warning_amber_rounded)),
-          const SizedBox(width: 8),
-          Expanded(
-              child: _statCard(
-                  theme, 'Favorites', '${favorites.length}', Icons.star)),
-        ],
-      ),
-    );
-  }
-
-  Widget _statCard(ThemeData theme, String title, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(height: 8),
-          Text(value,
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          Text(title, style: theme.textTheme.bodySmall),
-        ],
-      ),
-    );
-  }
-}
 
 // ── Focus card (watches focusProvider only) ──────────────────────────
 
@@ -295,85 +238,56 @@ class _FocusCard extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.timer_outlined,
-                    color: Colors.deepPurple),
+      child: GlassSurface(
+        borderRadius: 16,
+        depth: GlassDepth.level2,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isGlassTheme(context)
+                    ? GlassColors.accentSubtle
+                    : Colors.deepPurple.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('🎯 Focus',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
-                    Text(
-                      focusState.minutesToday > 0
-                          ? '${focusState.minutesToday}m focused today'
-                          : 'Start a deep work session',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
+              child: Icon(Icons.timer_outlined,
+                  color: isGlassTheme(context)
+                      ? GlassColors.accent
+                      : Colors.deepPurple),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('🎯 Focus',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(
+                    focusState.minutesToday > 0
+                        ? '${focusState.minutesToday}m focused today'
+                        : 'Start a deep work session',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: Colors.grey[600]),
+                  ),
+                ],
               ),
-              FilledButton.tonal(
-                onPressed: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const FocusScreen())),
-                child: const Text('Start'),
-              ),
-            ],
-          ),
+            ),
+            FilledButton.tonal(
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const FocusScreen())),
+              child: const Text('Start'),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ── Birthdays (watches birthdayProvider only) ────────────────────────
 
-class _BirthdaysSection extends ConsumerWidget {
-  const _BirthdaysSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final birthdays = ref.watch(birthdayProvider);
-
-    final upcoming = birthdays.maybeWhen(
-      data: (list) => list.where((b) => b.daysUntilNext() <= 30).toList(),
-      orElse: () => [],
-    );
-
-    if (upcoming.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(context, '🎂 Birthdays', upcoming.length),
-        ...upcoming.take(2).map((b) => ListTile(
-              leading: const Icon(Icons.cake_rounded, color: Colors.pink),
-              title: Text(b.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(b.daysUntilNext() == 0
-                  ? 'Today! 🎉'
-                  : b.daysUntilNext() == 1
-                      ? 'Tomorrow'
-                      : 'In ${b.daysUntilNext()} days'),
-            )),
-      ],
-    );
-  }
-}
 
 // ── Today tasks (watches todayTasks only) ───────────────────────────
 
@@ -397,6 +311,21 @@ class _TodayTasksSection extends ConsumerWidget {
 
 
 // ── Shared helpers ──────────────────────────────────────────────────
+
+/// Wrap non-glossy Material containers in frosted glass when the Glass theme
+/// is active. In every other theme the child passes through unchanged, so
+/// Dark / Light / AMOLED keep their exact existing look. Using this helper on
+/// the dashboard's decorative containers keeps the ≤3 BackdropFilter budget
+/// per screen (only depth levels 1-2 are used here, all non-interactive).
+Widget _glassWrap(BuildContext context, {required Widget child}) {
+  if (!isGlassTheme(context)) return child;
+  return GlassSurface(
+    borderRadius: 16,
+    depth: GlassDepth.level1,
+    padding: EdgeInsets.zero,
+    child: child,
+  );
+}
 
 Widget _buildSectionHeader(BuildContext context, String title, int count) {
   final theme = Theme.of(context);

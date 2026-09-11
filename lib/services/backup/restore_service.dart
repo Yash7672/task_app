@@ -92,8 +92,10 @@ class RestoreService {
     for (final entry in data.entries) {
       final rows = entry.value;
       if (rows is List) {
-        parsed[entry.key] =
-            rows.map((r) => Map<String, dynamic>.from(r as Map)).toList();
+        parsed[entry.key] = rows
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList();
       }
     }
 

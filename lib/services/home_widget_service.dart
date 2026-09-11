@@ -221,9 +221,11 @@ class HomeWidgetService {
           final t = allDisplayTasks[i];
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', t.title));
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', t.id));
+          taskFutures.add(HomeWidget.saveWidgetData<bool>('tasks_done_$i', t.isCompleted));
         } else {
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', ''));
           taskFutures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', ''));
+          taskFutures.add(HomeWidget.saveWidgetData<bool>('tasks_done_$i', false));
         }
       }
 
@@ -411,6 +413,56 @@ class HomeWidgetService {
   }
 
   // ── Update all widgets ────────────────────────────────────────────
+
+  /// Pushes today's tasks to the widget store and refreshes ONLY the Today
+  /// Tasks widget. Used by the background callback (widget checkbox taps)
+  /// where updating every widget would be wasteful.
+  static Future<void> refreshTodayTasksWidget(List<Task> allTasks) async {
+    if (kIsWeb) return;
+    try {
+      await init();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final todayTasks = allTasks.where((t) => isDueOn(t, today)).toList();
+
+      final pendingTasks =
+          todayTasks.where((t) => !t.isCompleted).toList();
+      final completedTasks = todayTasks.where((t) => t.isCompleted).toList();
+      final allDisplayTasks = [...pendingTasks, ...completedTasks];
+      final doneCount = completedTasks.length;
+
+      final futures = <Future<void>>[
+        HomeWidget.saveWidgetData<int>('tasks_total', todayTasks.length),
+        HomeWidget.saveWidgetData<int>('tasks_done', doneCount),
+        HomeWidget.saveWidgetData<int>('tasks_pending', pendingTasks.length),
+        HomeWidget.saveWidgetData<int>('tasks_more',
+            allDisplayTasks.length > 5 ? allDisplayTasks.length - 5 : 0),
+        HomeWidget.saveWidgetData<String>('tasks_last_updated',
+            DateTime.now().millisecondsSinceEpoch.toString()),
+      ];
+
+      for (var i = 0; i < 5; i++) {
+        if (i < allDisplayTasks.length) {
+          final t = allDisplayTasks[i];
+          futures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', t.title));
+          futures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', t.id));
+          futures.add(HomeWidget.saveWidgetData<bool>('tasks_done_$i', t.isCompleted));
+        } else {
+          futures.add(HomeWidget.saveWidgetData<String>('tasks_title_$i', ''));
+          futures.add(HomeWidget.saveWidgetData<String>('tasks_id_$i', ''));
+          futures.add(HomeWidget.saveWidgetData<bool>('tasks_done_$i', false));
+        }
+      }
+
+      await Future.wait(futures);
+      await HomeWidget.updateWidget(
+        androidName: 'PyloHomeWidgetProvider',
+        qualifiedAndroidName: _androidProviderName,
+      );
+    } catch (e) {
+      debugPrint('HomeWidget refreshTodayTasksWidget failed: $e');
+    }
+  }
 
   static Future<void> _updateAllWidgets() async {
     final providers = [

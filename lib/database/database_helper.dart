@@ -19,7 +19,7 @@ class DatabaseHelper {
   static String? _cachedDbPath;
   static Completer<void>? _dbInitCompleter;
 
-  static const int schemaVersion = 10;
+  static const int schemaVersion = 12;
 
   /// Test hook: when set, all database paths resolve here instead of the
   /// production `taskflow.db`. Lets each parallel test isolate own a private
@@ -60,12 +60,18 @@ class DatabaseHelper {
       _cachedDbPath = testDbPathOverride ?? p.join(dbPath, 'taskflow.db');
     }
 
-    return openDatabase(
+    final db = await openDatabase(
       _cachedDbPath!,
       version: schemaVersion,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
+    // Enable WAL plus a busy timeout so the background widget isolate's own
+    // connection to the same file can read/write concurrently without
+    // hitting SQLITE_BUSY lock contention.
+    await db.rawQuery('PRAGMA journal_mode = WAL;');
+    await db.rawQuery('PRAGMA busy_timeout = 5000;');
+    return db;
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -170,6 +176,43 @@ class DatabaseHelper {
               whereArgs: [row['id']],
             );
           }
+        }
+      }
+    }
+    if (oldVersion < 11) {
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+      );
+      if (tables.isNotEmpty) {
+        final columns = await db.rawQuery('PRAGMA table_info(tasks)');
+        if (!columns.any((c) => c['name'] == 'alarmEnabled')) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN alarmEnabled INTEGER DEFAULT 0');
+        }
+        if (!columns.any((c) => c['name'] == 'alarmTime')) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN alarmTime INTEGER DEFAULT NULL');
+        }
+      }
+    }
+    if (oldVersion < 12) {
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+      );
+      if (tables.isNotEmpty) {
+        final columns = await db.rawQuery('PRAGMA table_info(tasks)');
+        if (!columns.any((c) => c['name'] == 'alarmSound')) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN alarmSound TEXT DEFAULT NULL');
+        }
+        if (!columns.any((c) => c['name'] == 'alarmSoundType')) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN alarmSoundType TEXT DEFAULT NULL');
+        }
+        if (!columns.any((c) => c['name'] == 'alarmSoundUri')) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN alarmSoundUri TEXT DEFAULT NULL');
+        }
+        if (!columns.any((c) => c['name'] == 'snoozeDuration')) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN snoozeDuration INTEGER DEFAULT 5');
+        }
+        if (!columns.any((c) => c['name'] == 'vibrationEnabled')) {
+          await db.execute('ALTER TABLE tasks ADD COLUMN vibrationEnabled INTEGER DEFAULT 1');
         }
       }
     }
@@ -367,6 +410,13 @@ class DatabaseHelper {
         checklist TEXT,
         reminderMinutes TEXT DEFAULT '[]',
         estimatedDuration TEXT,
+        alarmEnabled INTEGER DEFAULT 0,
+        alarmTime INTEGER DEFAULT NULL,
+        alarmSound TEXT DEFAULT NULL,
+        alarmSoundType TEXT DEFAULT NULL,
+        alarmSoundUri TEXT DEFAULT NULL,
+        snoozeDuration INTEGER DEFAULT 5,
+        vibrationEnabled INTEGER DEFAULT 1,
         completedAt INTEGER,
         repeatMonthday INTEGER,
         createdAt INTEGER,

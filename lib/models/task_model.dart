@@ -53,6 +53,13 @@ class Task {
   final List<ChecklistItemData> checklist;
   final List<int> reminderMinutes;
   final String estimatedDuration;
+  final bool alarmEnabled;
+  final DateTime? alarmTime;
+  final String? alarmSound;
+  final String? alarmSoundType;
+  final String? alarmSoundUri;
+  final int snoozeDuration;
+  final bool vibrationEnabled;
   final DateTime? completedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -82,6 +89,13 @@ class Task {
     List<ChecklistItemData>? checklist,
     List<int>? reminderMinutes,
     this.estimatedDuration = '',
+    this.alarmEnabled = false,
+    this.alarmTime,
+    this.alarmSound,
+    this.alarmSoundType,
+    this.alarmSoundUri,
+    this.snoozeDuration = 5,
+    this.vibrationEnabled = true,
     this.completedAt,
     this.repeatMonthday,
     DateTime? createdAt,
@@ -112,6 +126,13 @@ class Task {
     List<ChecklistItemData>? checklist,
     List<int>? reminderMinutes,
     String? estimatedDuration,
+    bool? alarmEnabled,
+    Object? alarmTime = _clear,
+    String? alarmSound,
+    String? alarmSoundType,
+    String? alarmSoundUri,
+    int? snoozeDuration,
+    bool? vibrationEnabled,
     Object? completedAt = _clear,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -137,6 +158,13 @@ class Task {
       checklist: checklist ?? this.checklist,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       estimatedDuration: estimatedDuration ?? this.estimatedDuration,
+      alarmEnabled: alarmEnabled ?? this.alarmEnabled,
+      alarmTime: alarmTime == _clear ? this.alarmTime : alarmTime as DateTime?,
+      alarmSound: alarmSound ?? this.alarmSound,
+      alarmSoundType: alarmSoundType ?? this.alarmSoundType,
+      alarmSoundUri: alarmSoundUri ?? this.alarmSoundUri,
+      snoozeDuration: snoozeDuration ?? this.snoozeDuration,
+      vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
       completedAt:
           completedAt == _clear ? this.completedAt : completedAt as DateTime?,
       repeatMonthday: repeatMonthday ?? this.repeatMonthday,
@@ -167,6 +195,13 @@ class Task {
           jsonEncode(checklist.map((item) => item.toMap()).toList()),
       'reminderMinutes': jsonEncode(reminderMinutes),
       'estimatedDuration': estimatedDuration,
+      'alarmEnabled': alarmEnabled ? 1 : 0,
+      'alarmTime': alarmTime?.millisecondsSinceEpoch,
+      'alarmSound': alarmSound,
+      'alarmSoundType': alarmSoundType,
+      'alarmSoundUri': alarmSoundUri,
+      'snoozeDuration': snoozeDuration,
+      'vibrationEnabled': vibrationEnabled ? 1 : 0,
       'completedAt': completedAt?.millisecondsSinceEpoch,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
@@ -203,9 +238,18 @@ class Task {
     dynamic reminderValue = map['reminderMinutes'];
     List<int> parsedReminders = [];
     if (reminderValue is String && reminderValue.isNotEmpty) {
-      parsedReminders = (jsonDecode(reminderValue) as List)
-          .map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0)
-          .toList();
+      try {
+        final decoded = jsonDecode(reminderValue);
+        if (decoded is List) {
+          parsedReminders = decoded
+              .map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0)
+              .toList();
+        }
+      } catch (_) {
+        // A malformed persisted value must not brick every task screen;
+        // fall back to an empty reminder list.
+        parsedReminders = [];
+      }
     } else if (reminderValue is List) {
       parsedReminders =
           reminderValue.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0).toList();
@@ -243,6 +287,13 @@ class Task {
       checklist: parsedChecklist,
       reminderMinutes: parsedReminders,
       estimatedDuration: map['estimatedDuration'] ?? '',
+      alarmEnabled: map['alarmEnabled'] == 1,
+      alarmTime: map['alarmTime'] != null ? _parseDate(map['alarmTime']) : null,
+      alarmSound: map['alarmSound'],
+      alarmSoundType: map['alarmSoundType'],
+      alarmSoundUri: map['alarmSoundUri'],
+      snoozeDuration: map['snoozeDuration'] is int ? map['snoozeDuration'] : 5,
+      vibrationEnabled: map['vibrationEnabled'] != 0,
       repeatMonthday: map['repeatMonthday'] is int ? map['repeatMonthday'] : null,
       completedAt:
           map['completedAt'] != null ? _parseDate(map['completedAt']) : null,
@@ -343,6 +394,13 @@ class Task {
       checklist: List<ChecklistItemData>.from(checklist),
       reminderMinutes: List<int>.from(reminderMinutes),
       estimatedDuration: estimatedDuration,
+      alarmEnabled: alarmEnabled,
+      alarmTime: alarmTime?.add(delta),
+      alarmSound: alarmSound,
+      alarmSoundType: alarmSoundType,
+      alarmSoundUri: alarmSoundUri,
+      snoozeDuration: snoozeDuration,
+      vibrationEnabled: vibrationEnabled,
       repeatMonthday: repeatMonthday ?? dueDate.day,
     );
   }

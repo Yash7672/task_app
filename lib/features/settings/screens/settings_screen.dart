@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/alarm_sound_service.dart';
 import '../../../core/utils/backup_helper_native.dart'
     if (dart.library.js) '../../../core/utils/backup_helper_web.dart' as backup_helper;
 import '../../../core/utils/notification_helper.dart';
@@ -20,7 +21,6 @@ import '../../../services/backup/backup_service.dart';
 import '../../../services/backup/restore_service.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/home_widget_service.dart';
-import '../../../services/security/biometric_service.dart';
 import '../../categories/screens/manage_categories_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 
@@ -58,6 +58,8 @@ class SettingsScreen extends ConsumerWidget {
                   DropdownMenuItem(value: AppThemeMode.dark, child: Text('Dark')),
                   DropdownMenuItem(
                       value: AppThemeMode.amoled, child: Text('AMOLED')),
+                  DropdownMenuItem(
+                      value: AppThemeMode.glass, child: Text('Glass')),
                 ],
               ),
             ),
@@ -77,7 +79,6 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 if (security.appLockEnabled) ...[
                   const _BiometricTile(),
-                  const _FaceIdTile(),
                   ListTile(
                     title: const Text('Change PIN'),
                     subtitle: const Text('Update your app lock PIN'),
@@ -270,6 +271,99 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
 
+          _sectionHeader(context, 'Alarm'),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  title: const Text('Alarm sound'),
+                  subtitle: Text(_alarmSoundLabel(prefs)),
+                  trailing: DropdownButton<PyloAlarmSound>(
+                    value: PyloAlarmSound.fromId(prefs.alarmSoundId),
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      final notifier =
+                          ref.read(settingsPreferencesProvider.notifier);
+                      if (value == PyloAlarmSound.custom) {
+                        final uri =
+                            await AlarmSoundService.pickAndImportCustomSound();
+                        if (uri == null) {
+                          // Picker dismissed — keep the current sound.
+                          return;
+                        }
+                        await notifier.setAlarmSoundId('custom');
+                        await notifier.setCustomAlarmUri(uri);
+                      } else {
+                        await notifier.setAlarmSoundId(value.name);
+                      }
+                      await _applyCurrentAlarmConfig(ref);
+                      if (!kIsWeb) {
+                        await NotificationHelper.requestFullScreenAlarmPermission();
+                      }
+                    },
+                    items: [
+                      for (final sound in PyloAlarmSound.values)
+                        DropdownMenuItem(
+                          value: sound,
+                          child: Text(sound.label),
+                        ),
+                    ],
+                  ),
+                ),
+                SwitchListTile.adaptive(
+                  title: const Text('Vibrate with alarm'),
+                  subtitle: const Text('Shake the phone while it rings'),
+                  value: prefs.alarmVibrate,
+                  onChanged: (value) async {
+                    await ref
+                        .read(settingsPreferencesProvider.notifier)
+                        .setAlarmVibrate(value);
+                    await _applyCurrentAlarmConfig(ref);
+                  },
+                ),
+                ListTile(
+                  title: const Text('Snooze duration'),
+                  subtitle: Text(
+                      '${prefs.alarmSnoozeMinutes} min after snoozing'),
+                  trailing: DropdownButton<int>(
+                    value: prefs.alarmSnoozeMinutes,
+                    onChanged: (value) {
+                      if (value != null) {
+                        ref
+                            .read(settingsPreferencesProvider.notifier)
+                            .setAlarmSnoozeMinutes(value);
+                      }
+                    },
+                    items: const [
+                      DropdownMenuItem(value: 1, child: Text('1 min')),
+                      DropdownMenuItem(value: 5, child: Text('5 min')),
+                      DropdownMenuItem(value: 10, child: Text('10 min')),
+                      DropdownMenuItem(value: 15, child: Text('15 min')),
+                      DropdownMenuItem(value: 30, child: Text('30 min')),
+                    ],
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Preview alarm'),
+                  subtitle: const Text('Play the selected sound and vibration'),
+                  trailing: const Icon(Icons.play_circle_outline),
+                  onTap: () async {
+                    if (!kIsWeb) {
+                      await NotificationHelper.requestFullScreenAlarmPermission();
+                    }
+                    await NotificationHelper.previewAlarm(
+                      AlarmChannelConfig(
+                        sound: PyloAlarmSound.fromId(prefs.alarmSoundId),
+                        customUri: prefs.customAlarmUri,
+                        vibrate: prefs.alarmVibrate,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
           _sectionHeader(context, 'Data'),
           Card(
             child: Column(
@@ -445,6 +539,37 @@ class SettingsScreen extends ConsumerWidget {
               .titleSmall
               ?.copyWith(fontWeight: FontWeight.bold, color: Colors.grey[600])),
     );
+  }
+
+  /// Rebuilds the alarm channel to the persisted sound/vibration config, then
+  /// reschedules pending task alarms (a channel delete+recreate drops any
+  /// alarms that were scheduled on the old channel).
+  Future<void> _applyCurrentAlarmConfig(WidgetRef ref) async {
+    final prefs = ref.read(settingsPreferencesProvider);
+    await NotificationHelper.reconfigureAlarmChannel(
+      AlarmChannelConfig(
+        sound: PyloAlarmSound.fromId(prefs.alarmSoundId),
+        customUri: prefs.customAlarmUri,
+        vibrate: prefs.alarmVibrate,
+      ),
+    );
+    if (prefs.notificationsEnabled) {
+      try {
+        await ref.read(taskProvider.notifier).rescheduleAllTaskReminders();
+      } catch (e) {
+        debugPrint('Failed to reschedule alarms after config change: $e');
+      }
+    }
+  }
+
+  String _alarmSoundLabel(SettingsPreferences prefs) {
+    final sound = PyloAlarmSound.fromId(prefs.alarmSoundId);
+    if (sound == PyloAlarmSound.custom) {
+      return prefs.customAlarmUri == null
+          ? 'Custom (no file picked)'
+          : 'Custom audio file';
+    }
+    return sound.label;
   }
 
   Future<void> _toggleAppLock(
@@ -807,16 +932,12 @@ class _BiometricTile extends ConsumerStatefulWidget {
 }
 
 class _BiometricTileState extends ConsumerState<_BiometricTile> {
-  bool _prefersFace = false;
-
   @override
   void initState() {
     super.initState();
-    Future.microtask(() async {
-      await ref.read(securityProvider.notifier).refreshBiometrics();
-      final face =
-          await ref.read(securityProvider.notifier).prefersFaceBiometric();
-      if (mounted) setState(() => _prefersFace = face);
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(securityProvider.notifier).refreshBiometrics();
     });
   }
 
@@ -824,12 +945,10 @@ class _BiometricTileState extends ConsumerState<_BiometricTile> {
   Widget build(BuildContext context) {
     final security = ref.watch(securityProvider);
     return SwitchListTile.adaptive(
-      title: const Text('Biometric Unlock'),
+      title: const Text('Fingerprint Unlock'),
       subtitle: Text(security.biometricAvailable
-          ? (_prefersFace && !security.faceIdEnabled
-              ? 'Use face recognition to unlock'
-              : 'Use fingerprint or face to unlock')
-          : 'No biometrics enrolled on this device'),
+          ? 'Use fingerprint to unlock PYLO'
+          : 'No fingerprint enrolled on this device'),
       value: security.biometricEnabled && security.biometricAvailable,
       onChanged: security.biometricAvailable
           ? (value) async {
@@ -842,67 +961,4 @@ class _BiometricTileState extends ConsumerState<_BiometricTile> {
   }
 }
 
-/// Face ID unlock toggle shown below Biometric Unlock. Only interactive
-/// when a face biometric is enrolled on the device; enabling runs one
-/// verification scan so Face ID can't be turned on without proving it's
-/// really you.
-class _FaceIdTile extends ConsumerStatefulWidget {
-  const _FaceIdTile();
 
-  @override
-  ConsumerState<_FaceIdTile> createState() => _FaceIdTileState();
-}
-
-class _FaceIdTileState extends ConsumerState<_FaceIdTile> {
-  bool _verifying = false;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() {
-      if (!mounted) return;
-      ref.read(securityProvider.notifier).refreshBiometrics();
-    });
-  }
-
-  Future<void> _onToggle(bool enable) async {
-    final notifier = ref.read(securityProvider.notifier);
-    if (!enable) {
-      await notifier.setFaceIdEnabled(false);
-      return;
-    }
-    // Prove identity once before trusting Face ID for future unlocks.
-    setState(() => _verifying = true);
-    final ok = await BiometricService.authenticate(
-      reason: 'Confirm your face to enable Face ID unlock',
-    );
-    if (!mounted) return;
-    setState(() => _verifying = false);
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Face not verified — Face ID stayed off'),
-          backgroundColor: Colors.orange));
-      return;
-    }
-    await notifier.setFaceIdEnabled(true);
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Face ID enabled')));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final security = ref.watch(securityProvider);
-    return SwitchListTile.adaptive(
-      title: const Text('Face ID'),
-      subtitle: Text(_verifying
-          ? 'Verifying your face…'
-          : security.faceIdAvailable
-              ? 'Use face recognition to unlock PYLO'
-              : 'No face recognition enrolled on this device'),
-      value: security.faceIdEnabled && security.faceIdAvailable,
-      onChanged: (!_verifying && security.faceIdAvailable) ? _onToggle : null,
-    );
-  }
-}

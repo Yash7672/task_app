@@ -25,55 +25,145 @@
         android:paddingTop="2dp"
         android:paddingBottom="4dp" />
 
-    <TextView
-        android:id="@+id/widget_task_0"
+    <LinearLayout
+        android:id="@+id/widget_row_0"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="4dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
 
-    <TextView
-        android:id="@+id/widget_task_1"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="4dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        <ImageView
+            android:id="@+id/widget_checkbox_0"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/widget_checkbox_unchecked"
+            android:contentDescription="Complete task" />
 
-    <TextView
-        android:id="@+id/widget_task_2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="4dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        <TextView
+            android:id="@+id/widget_task_0"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/widget_task_color"
+            android:textSize="13sp"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
 
-    <TextView
-        android:id="@+id/widget_task_3"
+    <LinearLayout
+        android:id="@+id/widget_row_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="4dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
 
-    <TextView
-        android:id="@+id/widget_task_4"
+        <ImageView
+            android:id="@+id/widget_checkbox_1"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/widget_checkbox_unchecked"
+            android:contentDescription="Complete task" />
+
+        <TextView
+            android:id="@+id/widget_task_1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/widget_task_color"
+            android:textSize="13sp"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row_2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/widget_task_color"
-        android:textSize="13sp"
-        android:paddingTop="4dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
+
+        <ImageView
+            android:id="@+id/widget_checkbox_2"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/widget_checkbox_unchecked"
+            android:contentDescription="Complete task" />
+
+        <TextView
+            android:id="@+id/widget_task_2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/widget_task_color"
+            android:textSize="13sp"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row_3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
+
+        <ImageView
+            android:id="@+id/widget_checkbox_3"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/widget_checkbox_unchecked"
+            android:contentDescription="Complete task" />
+
+        <TextView
+            android:id="@+id/widget_task_3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/widget_task_color"
+            android:textSize="13sp"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row_4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
+
+        <ImageView
+            android:id="@+id/widget_checkbox_4"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginEnd="6dp"
+            android:src="@drawable/widget_checkbox_unchecked"
+            android:contentDescription="Complete task" />
+
+        <TextView
+            android:id="@+id/widget_task_4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/widget_task_color"
+            android:textSize="13sp"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/widget_more"
