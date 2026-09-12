@@ -24,7 +24,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Streaks'),
+        title: const Text('🔥 Streaks'),
         actions: [
           IconButton(
             icon: const Icon(Icons.stacked_bar_chart_outlined),
@@ -114,7 +114,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Active Streaks',
+                                Text('🔥 Active Streaks',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium

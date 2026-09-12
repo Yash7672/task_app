@@ -44,12 +44,17 @@ class AlarmActivity : Activity() {
         const val CHANNEL_RINGING = "pylo_alarm_ringing"
         const val NOTIFICATION_ID_PREFIX = 452100
         const val FLUTTER_PREFS = "FlutterSharedPreferences"
+        const val MAX_AUDIO_RESTARTS = 3
     }
 
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var isRinging = false
     private var dismissed = false
+
+    /// Count of consecutive audio rebuilds within one ring session; reset on
+    /// each (re)start of ringing so a recovered player can ring normally.
+    private var audioRestartAttempts = 0
 
     private var requestCode = 0
     private var taskId = ""
@@ -151,6 +156,9 @@ class AlarmActivity : Activity() {
 
     private fun startRingingAudioOnly() {
         if (dismissed) return
+        // Reset the rebuild cap on every (re)start of ringing (fresh intent or
+        // already-ringing update) so recovered sessions can ring normally.
+        audioRestartAttempts = 0
         startAudio()
         startVibration()
         isRinging = true
@@ -169,16 +177,26 @@ class AlarmActivity : Activity() {
                 player = buildRawPlayer(R.raw.alarm_classic)
             }
             player?.let {
+                if (++audioRestartAttempts > MAX_AUDIO_RESTARTS) {
+                    // Repeated rebuild failures (corrupt file / persistent OEM
+                    // error) mean this loop will never ring — stop burning CPU
+                    // instead of restarting audio on an infinite error loop.
+                    mediaPlayer = null
+                    return
+                }
                 mediaPlayer = it
                 it.setOnErrorListener { _, _, _ ->
                     // Missing/corrupt custom file or an OEM loop bug: rebuild on
-                    // the main thread instead of ringing in silence.
+                    // the main thread instead of ringing in silence. Capped so
+                    // a persistent error cannot spin startAudio forever.
                     Handler(Looper.getMainLooper()).post { startAudio() }
                     true
                 }
-                it.setOnCompletionListener {
-                    Handler(Looper.getMainLooper()).post { startAudio() }
-                }
+                // isLooping = true, so a REAL end-of-stream never happens for
+                // well-formed tracks. Listening for onCompletion and restarting
+                // is unnecessary and, on some OEM ROMs, both callbacks can fire
+                // for one failure — multiplying rebuilds. Completion relies on
+                // startRinging()/stopRing() instead.
                 it.isLooping = true
                 it.start()
             }

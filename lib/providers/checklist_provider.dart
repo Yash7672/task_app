@@ -16,11 +16,6 @@ class ChecklistsState {
     this.checklists = const [],
     this.items = const {},
   });
-
-  int completedCount(String checklistId) =>
-      (items[checklistId] ?? const []).where((i) => i.completed).length;
-
-  int totalCount(String checklistId) => (items[checklistId] ?? const []).length;
 }
 
 final checklistProvider =
@@ -47,11 +42,24 @@ class ChecklistNotifier extends StateNotifier<ChecklistsState> {
     loadChecklists();
   }
 
+  /// Coalesces rapid item toggles/taps into a single debounced widget push so
+  /// the platform channel is not hammered once per tap (double-toggles would
+  /// otherwise write the full widget data twice back-to-back).
+  Timer? _widgetDebounce;
   void _updateChecklistWidget() {
-    HomeWidgetService.refreshChecklist(
-      checklists: state.checklists,
-      items: state.items,
-    );
+    _widgetDebounce?.cancel();
+    _widgetDebounce = Timer(const Duration(milliseconds: 400), () {
+      unawaited(HomeWidgetService.refreshChecklist(
+        checklists: state.checklists,
+        items: state.items,
+      ));
+    });
+  }
+
+  @override
+  void dispose() {
+    _widgetDebounce?.cancel();
+    super.dispose();
   }
 
   Future<void> loadChecklists() async {

@@ -35,14 +35,28 @@ class _FocusTimerDisplay extends StatefulWidget {
   State<_FocusTimerDisplay> createState() => _FocusTimerDisplayState();
 }
 
-class _FocusTimerDisplayState extends State<_FocusTimerDisplay> {
+class _FocusTimerDisplayState extends State<_FocusTimerDisplay>
+    with WidgetsBindingObserver {
   Timer? _ticker;
   int _lastSecond = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _lastSecond = widget.session.remaining.inSeconds;
+    _startTicker();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  void _startTicker() {
+    _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         final currentSecond = widget.session.remaining.inSeconds;
@@ -55,9 +69,22 @@ class _FocusTimerDisplayState extends State<_FocusTimerDisplay> {
   }
 
   @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // No timers should run while the app is backgrounded — the second-level
+    // ticker is purely cosmetic and is re-synced on resume.
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        _ticker?.cancel();
+        _ticker = null;
+      case AppLifecycleState.resumed:
+        _lastSecond = widget.session.remaining.inSeconds;
+        _startTicker();
+      case AppLifecycleState.detached:
+        _ticker?.cancel();
+        _ticker = null;
+    }
   }
 
   String _format(Duration d) {

@@ -34,7 +34,6 @@ class AlarmScreen extends ConsumerStatefulWidget {
 
 class _AlarmScreenState extends ConsumerState<AlarmScreen>
     with SingleTickerProviderStateMixin {
-  Timer? _clockTicker;
   late final AnimationController _slideController;
   final GlobalKey _thumbKey = GlobalKey();
   double _slideProgress = 0.0;
@@ -55,9 +54,8 @@ class _AlarmScreenState extends ConsumerState<AlarmScreen>
     NotificationHelper.isAlarmOpen = true;
     unawaited(FocusChannel.setKeepScreenOn(true));
     _setImmersive();
-    _clockTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
+    // No 1-second setState here — the clock ticks in its own repaint-isolated
+    // child (_ClockDisplay), so the rest of the screen never repaints per sec.
     _slideController = AnimationController.unbounded(vsync: this)
       ..addListener(() => setState(() {}));
     _startAlarmSound();
@@ -71,7 +69,6 @@ class _AlarmScreenState extends ConsumerState<AlarmScreen>
   void dispose() {
     NotificationHelper.isAlarmOpen = false;
     unawaited(FocusChannel.setKeepScreenOn(false));
-    _clockTicker?.cancel();
     _slideController.dispose();
     _stopAlarmSound();
     super.dispose();
@@ -120,27 +117,6 @@ class _AlarmScreenState extends ConsumerState<AlarmScreen>
       await _alarmPlayer?.dispose();
     } catch (_) {}
     _alarmPlayer = null;
-  }
-
-  String _two(int n) => n.toString().padLeft(2, '0');
-
-  String get _nowHourMinute {
-    final now = DateTime.now();
-    return '${_two(now.hour)}:${_two(now.minute)}';
-  }
-
-  String get _todayLabel {
-    const weekdays = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-      'Friday', 'Saturday', 'Sunday',
-    ];
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ];
-    final now = DateTime.now();
-    return '${weekdays[now.weekday - 1]}, '
-        '${months[now.month - 1]} ${now.day}';
   }
 
   Future<void> _snooze() async {
@@ -361,24 +337,13 @@ class _AlarmScreenState extends ConsumerState<AlarmScreen>
                 ),
                 const SizedBox(height: 28),
 
-                // Big clock.
-                Text(
-                  _nowHourMinute,
-                  style: TextStyle(
-                    color: c.clockColor,
-                    fontSize: 96,
-                    fontWeight: FontWeight.w200,
-                    height: 1.0,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _todayLabel,
-                  style: TextStyle(
-                    color: c.dateColor,
-                    fontSize: 15,
-                    letterSpacing: 0.6,
+                // Big clock + date. Wrapped in a RepaintBoundary and owns its
+                // own ticker, so the per-minute repaint is bounded to this
+                // small subtree instead of the whole screen.
+                RepaintBoundary(
+                  child: _ClockDisplay(
+                    clockColor: c.clockColor,
+                    dateColor: c.dateColor,
                   ),
                 ),
                 const Spacer(flex: 3),
@@ -407,6 +372,93 @@ class _AlarmScreenState extends ConsumerState<AlarmScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Clock — repaint-isolated ticking clock (see RepaintBoundary in build above).
+// ---------------------------------------------------------------------------
+
+class _ClockDisplay extends StatefulWidget {
+  const _ClockDisplay({
+    required this.clockColor,
+    required this.dateColor,
+  });
+
+  final Color clockColor;
+  final Color dateColor;
+
+  @override
+  State<_ClockDisplay> createState() => _ClockDisplayState();
+}
+
+class _ClockDisplayState extends State<_ClockDisplay> {
+  Timer? _ticker;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      final now = DateTime.now();
+      // Only repaint when a shown value actually changes (minute rollover or
+      // date change) — the display is minute-resolution, so rebuilding 60x/min
+      // would be wasted work.
+      if (now.minute != _now.minute || now.day != _now.day) {
+        setState(() => _now = now);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  String _two(int n) => n.toString().padLeft(2, '0');
+
+  String get _nowHourMinute => '${_two(_now.hour)}:${_two(_now.minute)}';
+
+  String get _todayLabel {
+    const weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+      'Friday', 'Saturday', 'Sunday',
+    ];
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return '${weekdays[_now.weekday - 1]}, '
+        '${months[_now.month - 1]} ${_now.day}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _nowHourMinute,
+          style: TextStyle(
+            color: widget.clockColor,
+            fontSize: 96,
+            fontWeight: FontWeight.w200,
+            height: 1.0,
+            letterSpacing: 2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _todayLabel,
+          style: TextStyle(
+            color: widget.dateColor,
+            fontSize: 15,
+            letterSpacing: 0.6,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -492,8 +544,7 @@ class _SlideDismissBar extends StatelessWidget {
             // Thumb.
             Align(
               alignment: Alignment.centerLeft,
-              child: AnimatedPadding(
-                duration: Duration.zero,
+              child: Padding(
                 padding: EdgeInsets.only(
                   left: 6 + progress * 240,
                 ),

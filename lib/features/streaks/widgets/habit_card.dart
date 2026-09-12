@@ -25,8 +25,11 @@ class HabitCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isCompletedToday = habit.isCompletedToday;
-    final effectiveStreak = habit.effectiveCurrentStreak();
+    // One "now" for the whole card so streak/date math is consistent and
+    // DateTime.now() isn't called once per method.
+    final now = DateTime.now();
+    final isCompletedToday = habit.isCompletedOnDate(now);
+    final effectiveStreak = habit.effectiveCurrentStreak(now: now);
     final theme = Theme.of(context);
 
     return Card(
@@ -166,7 +169,7 @@ class HabitCard extends ConsumerWidget {
                       size: 14, color: _mutedText(context)),
                   const SizedBox(width: 6),
                   Text(
-                    'Last Completed: ${habit.getLastCompletedLabel(referenceDate: DateTime.now())}',
+                    'Last Completed: ${habit.getLastCompletedLabel(referenceDate: now)}',
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: _mutedText(context)),
                   ),

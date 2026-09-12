@@ -85,72 +85,76 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tasks = ref.watch(allTasksProvider);
-
-    // Pre-compute O(N) once instead of O(42*N) per eventLoader call
-    final tasksByDay = <DateTime, List<Task>>{};
-    for (final task in tasks) {
-      if (task.isDeleted || task.isArchived) continue;
-      final day = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-      tasksByDay.putIfAbsent(day, () => []).add(task);
-    }
+    // Memoized: recomputed only when the underlying task list changes, not on
+    // every day-tap or rebuild (see tasksByDayProvider in task_provider.dart).
+    final tasksByDay = ref.watch(tasksByDayProvider);
+    final day = DateTime(
+        _selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final selectedTasks = tasksByDay[day] ?? const <Task>[];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Calendar')),
-      body: ListView(
-        children: [
-          TableCalendar(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            calendarFormat: CalendarFormat.month,
-            availableCalendarFormats: const {
-              CalendarFormat.month: 'Month',
-            },
-            headerStyle: isGlassTheme(context)
-                ? PyloCalendarStyle.header(context)
-                : const HeaderStyle(formatButtonVisible: false),
-            daysOfWeekStyle: isGlassTheme(context)
-                ? PyloCalendarStyle.daysOfWeek(context)
-                : const DaysOfWeekStyle(),
-            calendarStyle: isGlassTheme(context)
-                ? PyloCalendarStyle.calendar(context)
-                : const CalendarStyle(),
-            selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDate = selectedDay;
-                _focusedDay = focusedDay;
-              });
-            },
-            eventLoader: (day) =>
-                tasksByDay[DateTime(day.year, day.month, day.day)] ??
-                const [],
+      body: CustomScrollView(
+        slivers: [
+          // RepaintBoundary isolates the 42-cell grid so a day-tap / task-list
+          // change never repaints the whole calendar.
+          SliverToBoxAdapter(
+            child: RepaintBoundary(
+              key: const ValueKey('calendar_grid'),
+              child: TableCalendar(
+                firstDay: DateTime.utc(2020, 1, 1),
+                lastDay: DateTime.utc(2030, 12, 31),
+                focusedDay: _focusedDay,
+                calendarFormat: CalendarFormat.month,
+                availableCalendarFormats: const {
+                  CalendarFormat.month: 'Month',
+                },
+                headerStyle: isGlassTheme(context)
+                    ? PyloCalendarStyle.header(context)
+                    : const HeaderStyle(formatButtonVisible: false),
+                daysOfWeekStyle: isGlassTheme(context)
+                    ? PyloCalendarStyle.daysOfWeek(context)
+                    : const DaysOfWeekStyle(),
+                calendarStyle: isGlassTheme(context)
+                    ? PyloCalendarStyle.calendar(context)
+                    : const CalendarStyle(),
+                selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
+                onDaySelected: (selectedDay, focusedDay) {
+                  setState(() {
+                    _selectedDate = selectedDay;
+                    _focusedDay = focusedDay;
+                  });
+                },
+                eventLoader: (day) =>
+                    tasksByDay[DateTime(day.year, day.month, day.day)] ??
+                    const [],
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-                'Tasks for ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                style: Theme.of(context).textTheme.titleMedium),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                  'Tasks for ${day.day}/${day.month}/${day.year}',
+                  style: Theme.of(context).textTheme.titleMedium),
+            ),
           ),
-          ..._buildSelectedTasks(tasksByDay, _selectedDate),
+          if (selectedTasks.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No tasks scheduled for this day.')),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => TaskListItem(task: selectedTasks[index]),
+                childCount: selectedTasks.length,
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
-  }
-
-  List<Widget> _buildSelectedTasks(Map<DateTime, List<Task>> tasksByDay, DateTime date) {
-    final day = DateTime(date.year, date.month, date.day);
-    final selectedTasks = tasksByDay[day] ?? [];
-
-    if (selectedTasks.isEmpty) {
-      return const [
-        Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('No tasks scheduled for this day.')),
-      ];
-    }
-    return selectedTasks.map((task) => TaskListItem(task: task)).toList();
   }
 }

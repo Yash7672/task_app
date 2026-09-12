@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_helper.dart';
@@ -63,7 +63,7 @@ class FocusState {
   }
 }
 
-class FocusNotifier extends StateNotifier<FocusState> {
+class FocusNotifier extends StateNotifier<FocusState> with WidgetsBindingObserver {
   final DatabaseHelper _dbHelper;
   final FocusService _service;
   Timer? _ticker;
@@ -71,7 +71,24 @@ class FocusNotifier extends StateNotifier<FocusState> {
   int _widgetUpdateCounter = 0;
 
   FocusNotifier(this._dbHelper, this._service) : super(const FocusState()) {
+    WidgetsBinding.instance.addObserver(this);
     _restore();
+  }
+
+  /// Pauses the 1 s session ticker when the app leaves the foreground so a
+  /// backgrounded focus session does not wake the CPU once per second for its
+  /// entire duration; the ticker resumes (and re-syncs remaining time) on the
+  /// next resume. Completion is unaffected: it is also armed via an exact
+  /// zoned notification, not the ticker.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.resumed) {
+      if (state.active != null) _startTicker();
+    } else if (lifecycleState == AppLifecycleState.hidden ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _ticker?.cancel();
+    }
   }
 
   Future<void> _restore() async {
@@ -251,6 +268,7 @@ class FocusNotifier extends StateNotifier<FocusState> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     super.dispose();
   }

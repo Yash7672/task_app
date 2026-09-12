@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -37,6 +38,11 @@ class AlarmSoundService {
   /// play at a time; stopPreview() must be called before leaving any screen
   /// that uses preview to avoid leaked audio streams.
   static AudioPlayer? _previewPlayer;
+
+  /// Timer for the preview's auto-stop. Held so a new preview can cancel the
+  /// previous one and so stopPreview() never leaves a dangling runnable that
+  /// later fires against a null/replaced player.
+  static Timer? _previewAutoStop;
 
   /// Asks the user for an audio file, copies it into `alarms/` inside the app
   /// files directory, and returns the resulting content:// URI.
@@ -215,10 +221,12 @@ class AlarmSoundService {
       if (player == null) return;
       _previewPlayer = player;
 
-      // Auto-stop after duration to avoid infinite preview.
-      Future.delayed(Duration(seconds: durationSeconds), () {
-        stopPreview();
-      });
+      // Auto-stop after duration to avoid infinite preview. Replace any prior
+      // auto-stop so a short-preview-then-long-preview sequence cannot cut the
+      // second one short.
+      _previewAutoStop?.cancel();
+      _previewAutoStop =
+          Timer(Duration(seconds: durationSeconds), stopPreview);
     } catch (e) {
       debugPrint('AlarmSoundService.playPreview failed: $e');
       await stopPreview();
@@ -227,6 +235,8 @@ class AlarmSoundService {
 
   /// Stops any playing preview and releases the audio player resources.
   static Future<void> stopPreview() async {
+    _previewAutoStop?.cancel();
+    _previewAutoStop = null;
     try {
       await _previewPlayer?.stop();
       await _previewPlayer?.dispose();

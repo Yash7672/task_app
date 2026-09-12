@@ -198,6 +198,9 @@ class TaskListItem extends ConsumerWidget {
                           if (ref
                               .read(settingsPreferencesProvider)
                               .notificationsEnabled) {
+                            await NotificationHelper.cancelAllForTask(
+                                task.id,
+                                reminderMinutes: task.reminderMinutes);
                             _scheduleReminderIfNeeded(task);
                           }
                           break;

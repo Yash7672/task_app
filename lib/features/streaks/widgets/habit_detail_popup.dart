@@ -204,10 +204,9 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
             ),
           ),
           if (isCompleted && !isFuture)
-            const Icon(
-              Icons.local_fire_department,
-              size: 11,
-              color: Color(0xFFFFB74D),
+            const Text(
+              '🔥',
+              style: TextStyle(fontSize: 9, height: 1),
             ),
         ],
       ),

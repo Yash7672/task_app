@@ -72,6 +72,9 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
               onChanged: (value) {
                 _debounce?.cancel();
                 _debounce = Timer(const Duration(milliseconds: 300), () {
+                  // Guard against async firing if the screen is popped while
+                  // the debounce window is still running.
+                  if (!mounted) return;
                   setState(() {
                     _queryLower = value.toLowerCase();
                   });

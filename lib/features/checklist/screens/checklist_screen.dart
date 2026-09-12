@@ -20,6 +20,19 @@ class ChecklistScreen extends ConsumerWidget {
     final state = ref.watch(checklistProvider);
     final theme = Theme.of(context);
 
+    // Precompute per-checklist totals once per build instead of scanning every
+    // item list again for every row during itemBuilder (O(items) not
+    // O(rows × items)).
+    final totals = <String, (int, int)>{};
+    for (final checklist in state.checklists) {
+      final items = state.items[checklist.id] ?? const <ChecklistItem>[];
+      var done = 0;
+      for (final item in items) {
+        if (item.completed) done++;
+      }
+      totals[checklist.id] = (done, items.length);
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Checklists')),
       floatingActionButton: FloatingActionButton.extended(
@@ -64,8 +77,8 @@ class ChecklistScreen extends ConsumerWidget {
               itemCount: state.checklists.length,
               itemBuilder: (context, index) {
                 final checklist = state.checklists[index];
-                final total = state.totalCount(checklist.id);
-                final done = state.completedCount(checklist.id);
+                final (done, total) =
+                    totals[checklist.id] ?? const (0, 0);
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(

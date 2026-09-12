@@ -14,11 +14,13 @@ import '../../tasks/screens/add_edit_task_screen.dart';
 import '../../tasks/screens/task_list_screen.dart';
 import '../widgets/task_list_item.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final todayTasks = ref.watch(todayTasksProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -59,17 +61,18 @@ class DashboardScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: const SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _GreetingHeader(),
-            _StreakSummaryCard(),
-            _FocusCard(),
-            _TodayTasksSection(),
-            SizedBox(height: 80),
-          ],
-        ),
+      // CustomScrollView with slivers keeps the today-task rows lazy: only the
+      // visible subset is laid out, even on huge task lists.
+      body: CustomScrollView(
+        slivers: [
+          const SliverToBoxAdapter(child: _GreetingHeader()),
+          const SliverToBoxAdapter(child: _StreakSummaryCard()),
+          const SliverToBoxAdapter(child: _FocusCard()),
+          SliverToBoxAdapter(
+              child: _buildSectionHeader(context, 'Today', todayTasks.length)),
+          ..._buildTaskSlivers(context, todayTasks),
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'dashboard_fab',
@@ -92,13 +95,22 @@ class _GreetingHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final todayTasks = ref.watch(todayTasksProvider);
+    // Slice select: the header repaints only when the completed/total pair
+    // changes — a toggled subtitle field or reordered list won't redraw it.
+    final counts =
+        ref.watch(todayTasksProvider.select((todayTasks) {
+      var completedCount = 0;
+      for (final t in todayTasks) {
+        if (t.isCompleted) completedCount++;
+      }
+      return (completed: completedCount, total: todayTasks.length);
+    }));
     final theme = Theme.of(context);
 
-    final completedCount = todayTasks.where((t) => t.isCompleted).length;
-    final progress = todayTasks.isEmpty
+    final completedCount = counts.completed;
+    final progress = counts.total == 0
         ? 0
-        : (completedCount / todayTasks.length * 100).round();
+        : (completedCount / counts.total * 100).round();
 
     final hour = DateTime.now().hour;
     final greeting = hour < 12
@@ -140,7 +152,7 @@ class _GreetingHeader extends ConsumerWidget {
                       Text('Daily progress',
                           style: theme.textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold)),
-                      Text('$completedCount of ${todayTasks.length} done',
+                      Text('$completedCount of ${counts.total} done',
                           style: theme.textTheme.bodySmall),
                     ],
                   ),
@@ -293,23 +305,34 @@ class _FocusCard extends ConsumerWidget {
 
 
 
-// ── Today tasks (watches todayTasks only) ───────────────────────────
+// ── Today tasks ──────────────────────────────────────────────────────
 
-class _TodayTasksSection extends ConsumerWidget {
-  const _TodayTasksSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final todayTasks = ref.watch(todayTasksProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(context, 'Today', todayTasks.length),
-        _buildTaskList(context, todayTasks),
-      ],
-    );
+/// Lazy sliver versions of the previously eagerly-built section: only visible
+/// rows are mounted, and separators are emitted between items exactly like the
+/// old ListView.separated(shrinkWrap: true).
+List<Widget> _buildTaskSlivers(BuildContext context, List<Task> tasks) {
+  if (tasks.isEmpty) {
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Center(
+              child: Text('No tasks here.',
+                  style: TextStyle(
+                      color: isGlassTheme(context)
+                          ? GlassColors.textMuted
+                          : Colors.grey[500]))),
+        ),
+      ),
+    ];
   }
+  return [
+    SliverList.separated(
+      itemCount: tasks.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) => TaskListItem(task: tasks[index]),
+    ),
+  ];
 }
 
 
@@ -354,26 +377,5 @@ Widget _buildSectionHeader(BuildContext context, String title, int count) {
         )
       ],
     ),
-  );
-}
-
-Widget _buildTaskList(BuildContext context, List<Task> tasks) {
-  if (tasks.isEmpty) {
-    return Padding(
-      padding: const EdgeInsets.all(32.0),
-      child: Center(
-          child: Text('No tasks here.',
-              style: TextStyle(
-                  color: isGlassTheme(context)
-                      ? GlassColors.textMuted
-                      : Colors.grey[500]))),
-    );
-  }
-  return ListView.separated(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    itemCount: tasks.length,
-    separatorBuilder: (_, __) => const SizedBox(height: 8),
-    itemBuilder: (context, index) => TaskListItem(task: tasks[index]),
   );
 }

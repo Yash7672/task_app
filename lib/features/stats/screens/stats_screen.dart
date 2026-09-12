@@ -9,17 +9,29 @@ class StatsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tasks = ref.watch(allTasksProvider);
+    // Narrow selects so this screen only rebuilds when the exact values it
+    // renders actually change (a task mutating another field, or a focus
+    // session ticking, must not repaint these cards).
+    final counts = ref.watch(allTasksProvider.select((tasks) {
+      var completed = 0;
+      var total = 0;
+      for (final task in tasks) {
+        if (task.isArchived) continue;
+        total++;
+        if (task.isCompleted) completed++;
+      }
+      return (completed: completed, total: total);
+    }));
     final streakStats = ref.watch(overallStatsProvider);
-    final focusState = ref.watch(focusProvider);
+    final minutesToday =
+        ref.watch(focusProvider.select((s) => s.minutesToday));
+    final sessionCount =
+        ref.watch(focusProvider.select((s) => s.history.length));
     final theme = Theme.of(context);
 
-    // Count consistently over non-archived tasks so "Completed" can never
-    // exceed "Total Tasks".
-    final active = tasks.where((task) => !task.isArchived).toList();
-    final completed = active.where((task) => task.isCompleted).length;
-    final pending = active.where((task) => !task.isCompleted).length;
-    final total = active.length;
+    final completed = counts.completed;
+    final total = counts.total;
+    final pending = total - completed;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Statistics')),
@@ -37,9 +49,16 @@ class StatsScreen extends ConsumerWidget {
           _statCard(context, Icons.list_alt_rounded, Colors.blue,
               'Total Tasks', '$total'),
           const SizedBox(height: 24),
-          Text('Streaks',
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              const Icon(Icons.local_fire_department,
+                  color: Colors.deepOrange, size: 24),
+              const SizedBox(width: 8),
+              Text('Streaks',
+                  style: theme.textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+            ],
+          ),
           const SizedBox(height: 12),
           _statCard(context, Icons.local_fire_department, Colors.deepOrange,
               'Active Streaks', '${streakStats['totalStreaks']}'),
@@ -53,9 +72,9 @@ class StatsScreen extends ConsumerWidget {
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           _statCard(context, Icons.timer_outlined, Colors.deepPurple,
-              'Focus Today', _formatMinutes(focusState.minutesToday)),
+              'Focus Today', _formatMinutes(minutesToday)),
           _statCard(context, Icons.history_rounded, Colors.indigo,
-              'Sessions Logged', '${focusState.history.length}'),
+              'Sessions Logged', '$sessionCount'),
         ],
       ),
     );

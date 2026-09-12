@@ -32,9 +32,10 @@ Future<void> onWidgetTaskAction(Uri? uri) async {
       final toggled = task.copyWith(isCompleted: !task.isCompleted);
       await db.updateTask(toggled);
 
-      // Re-fetch to get the updated list after the DB write.
-      final updatedTasks = await db.getAllTasks();
-      await HomeWidgetService.refreshTodayTasksWidget(updatedTasks);
+      // Mutate the already-fetched list in place so the widget push avoids a
+      // second full-table scan right after the write.
+      allTasks[taskIndex] = toggled;
+      await HomeWidgetService.refreshTodayTasksWidget(allTasks);
     } finally {
       // This headless isolate opened its own connection to the same DB file.
       // Close it so the file handle is never leaked between widget taps and

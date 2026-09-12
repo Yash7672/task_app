@@ -22,6 +22,11 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   final DatabaseHelper dbHelper;
   Timer? _midnightTimer;
 
+  /// Deduplicates concurrent [loadTasks] calls: the notifier auto-loads at
+  /// construction while startup also asks for a reload/reschedule — both share
+  /// one DB query instead of running the full-table scan twice back-to-back.
+  Future<void>? _loadInFlight;
+
   /// Serializes ALL task mutations (add/update/delete/restore/archive/…) so
   /// overlapping calls — e.g. swipe-delete followed by an immediate Undo —
   /// run one after the other in deterministic FIFO order. Without this,
@@ -67,7 +72,15 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     super.dispose();
   }
 
-  Future<void> loadTasks() async {
+  Future<void> loadTasks() {
+    final inFlight = _loadInFlight;
+    if (inFlight != null) return inFlight;
+    final run = _doLoadTasks();
+    _loadInFlight = run.whenComplete(() => _loadInFlight = null);
+    return _loadInFlight!;
+  }
+
+  Future<void> _doLoadTasks() async {
     final rev = _dataRevision;
     try {
       // Only flash the loading state when nothing is on screen yet.
@@ -342,6 +355,10 @@ try {
   /// archived, not deleted) task that has reminders. Used on startup and
   /// after the "Task reminders" master switch is turned on.
   Future<void> rescheduleAllTaskReminders() async {
+    // Ensure the task list is loaded first (dedupes the notifier's own
+    // construction-time load) so reminders are never (re)built from empty
+    // state on a cold start.
+    await loadTasks();
     for (final task in _currentTasks) {
       if (task.isCompleted || task.isArchived || task.isDeleted) continue;
       try {
@@ -441,6 +458,22 @@ final overdueTasksProvider = Provider<List<Task>>((ref) {
 final favoritesProvider = Provider<List<Task>>((ref) {
   final tasks = ref.watch(allTasksProvider);
   return tasks.where((task) => task.isFavorite).toList();
+});
+
+/// Tasks grouped by their local calendar date. Recomputes only when the task
+/// list changes — calendar day-taps and rebuilds read this cached map instead
+/// of re-scanning every task.
+final tasksByDayProvider =
+    Provider<Map<DateTime, List<Task>>>((ref) {
+  final tasks = ref.watch(allTasksProvider);
+  final byDay = <DateTime, List<Task>>{};
+  for (final task in tasks) {
+    if (task.isDeleted || task.isArchived) continue;
+    final day =
+        DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+    byDay.putIfAbsent(day, () => []).add(task);
+  }
+  return byDay;
 });
 
 final archivedTasksProvider =

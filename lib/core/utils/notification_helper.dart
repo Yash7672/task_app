@@ -188,6 +188,7 @@ class NotificationHelper {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static Future<void>? _initFuture;
 
   /// Upper bound on how many platform notifications one task may own. Must be
   /// identical between the scheduling loop and cancelAllForTask so a
@@ -257,16 +258,32 @@ class NotificationHelper {
   static bool isAlarmOpen = false;
 
   /// Ensure the notification plugin is initialized exactly once.
-  /// Safe to call from any context; idempotent.
-  static Future<void> ensureInitialized() async {
-    if (_initialized) return;
-    await init();
-  }
+  /// Safe to call from any context; idempotent and race-free: concurrent first
+  /// callers share a single in-flight init future instead of double-initializing.
+  static Future<void> ensureInitialized() => init();
 
   static Future<void> init() async {
     if (kIsWeb) {
       return;
     }
+    if (_initialized) return;
+    final inFlight = _initFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+    final run = _doInit();
+    _initFuture = run;
+    try {
+      await run;
+    } finally {
+      // Cleared on both success and failure so a failed attempt can retry on
+      // the next call while concurrent callers awaited this shared future.
+      _initFuture = null;
+    }
+  }
+
+  static Future<void> _doInit() async {
     if (_initialized) return;
 
     try {
@@ -585,6 +602,10 @@ class NotificationHelper {
     if (kIsWeb) {
       return;
     }
+    // Birthday reminders can fire concurrently with cold-start init; gate on
+    // the plugin being ready so a zonedSchedule can never race ahead of
+    // initialization and get silently dropped (MissingPluginException).
+    await ensureInitialized();
     final now = DateTime.now();
     var scheduled = firstOccurrence;
     if (!scheduled.isAfter(now)) {
@@ -701,6 +722,7 @@ class NotificationHelper {
     if (kIsWeb) {
       return;
     }
+    await ensureInitialized();
     // Batch cancel: cancel current year IDs and legacy year IDs concurrently.
     // Birthday IDs use the offset namespace.
     final cancelFutures = <Future<void>>[];

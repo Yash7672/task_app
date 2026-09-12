@@ -384,8 +384,6 @@ class DatabaseHelper {
         mode TEXT DEFAULT 'normal'
       )
     ''');
-
-    await _createIndexes(db);
   }
 
   Future<void> _createDB(Database db, int version) async {

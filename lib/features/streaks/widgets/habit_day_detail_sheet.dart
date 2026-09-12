@@ -85,18 +85,16 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
     if (!mounted) return;
     final dbHelper = ref.read(databaseProvider);
     final notifier = ref.read(habitsProvider.notifier);
-    final items = await dbHelper.getCompletionChecklist(
-      widget.habit.id,
-      _dateKey,
-    );
-    if (!mounted) return;
-    // Also check if there's a habit log entry for this date.
-    final completed =
-        await notifier.isCompletedOnDate(widget.habit.id, widget.day);
+    // Both queries are independent — run them concurrently instead of
+    // serially so the sheet opens as soon as the slower one completes.
+    final results = await Future.wait([
+      dbHelper.getCompletionChecklist(widget.habit.id, _dateKey),
+      notifier.isCompletedOnDate(widget.habit.id, widget.day),
+    ]);
     if (!mounted) return;
     setState(() {
-      _items = items;
-      _isCompleted = completed;
+      _items = results[0] as List<HabitCompletionItem>;
+      _isCompleted = results[1] as bool;
       _isLoading = false;
     });
   }
@@ -226,13 +224,9 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
               // ── Header ──
               Row(
                 children: [
-                  Icon(
-                    _isCompleted ? Icons.local_fire_department : Icons.event_note,
-                    size: 22,
-                    color: _isCompleted
-                        ? const Color(0xFFFFB74D)
-                        : _secondaryText(context),
-                  ),
+                  _isCompleted
+                    ? const Text('🔥', style: TextStyle(fontSize: 22))
+                    : const Icon(Icons.event, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -338,12 +332,24 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                       ),
                     )
                 else
-                  ...(_items.map((item) => _CompletionTile(
-                        item: item,
-                        onToggle: () => _toggleItem(item),
-                        onEdit: () => _editItem(item),
-                        onDelete: () => _deleteItem(item),
-                      ))),
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 260),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _items.length,
+                        itemBuilder: (context, index) {
+                          final item = _items[index];
+                          return _CompletionTile(
+                            item: item,
+                            onToggle: () => _toggleItem(item),
+                            onEdit: () => _editItem(item),
+                            onDelete: () => _deleteItem(item),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 Row(
                   children: [

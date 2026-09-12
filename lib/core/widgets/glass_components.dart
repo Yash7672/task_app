@@ -223,10 +223,7 @@ class GlassButton extends StatelessWidget {
 
     return GestureDetector(
       onTap: onPressed,
-      child: AnimatedScale(
-        scale: 1.0,
-        duration: const Duration(milliseconds: 80),
-        child: Container(
+      child: Container(
           padding: padding ?? const EdgeInsets.symmetric(
               horizontal: 20, vertical: 12),
           alignment: Alignment.center,
@@ -243,7 +240,6 @@ class GlassButton extends StatelessWidget {
             child: child,
           ),
         ),
-      ),
     );
   }
 }

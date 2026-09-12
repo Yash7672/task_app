@@ -159,6 +159,9 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp>
       sw.reset();
 
       // Notification init, birthday reschedule, and widget init run concurrently.
+      // Note: no HomeWidgetService.pushNow() here — the task/habit providers
+      // load immediately after startup and their debounced _flush() already
+      // pushes widget data once. An explicit push would double the writes.
       final prefs = ref.read(settingsPreferencesProvider);
       await Future.wait([
         NotificationHelper.init().catchError((e) {
@@ -171,15 +174,11 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp>
         if (prefs.notificationsEnabled)
           ref
               .read(taskProvider.notifier)
-              .loadTasks()
-              .then((_) =>
-                  ref.read(taskProvider.notifier).rescheduleAllTaskReminders())
+              .rescheduleAllTaskReminders()
               .catchError((e) {
             if (kDebugMode) debugPrint('Task reminder reschedule failed: $e');
           }),
-        HomeWidgetService.init()
-            .then((_) => HomeWidgetService.pushNow())
-            .catchError((e) {
+        HomeWidgetService.init().catchError((e) {
           if (kDebugMode) debugPrint('HomeWidget init failed: $e');
         }),
       ]);

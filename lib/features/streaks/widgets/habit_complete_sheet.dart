@@ -221,39 +221,49 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
                 ),
               )
             else
-              ...items.map(
-                (item) => Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                        color: isGlassTheme(context)
-                            ? GlassColors.borderMedium
-                            : Colors.grey.shade300),
-                  ),
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.check_circle_outline,
-                        color: Colors.green),
-                    title: Text(item.text),
-                    trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined,
-                                size: 20),
-                            tooltip: 'Edit',
-                            onPressed: () => _editItem(item),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete_outline,
-                                size: 20, color: Colors.red.shade400),
-                            tooltip: 'Delete',
-                            onPressed: () => deleteItemAndSync(item),
-                          ),
-                        ],
-                      ),
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return Card(
+                        elevation: 0,
+                        margin: const EdgeInsets.only(bottom: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                              color: isGlassTheme(context)
+                                  ? GlassColors.borderMedium
+                                  : Colors.grey.shade300),
+                        ),
+                        child: ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.check_circle_outline,
+                              color: Colors.green),
+                          title: Text(item.text),
+                          trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined,
+                                      size: 20),
+                                  tooltip: 'Edit',
+                                  onPressed: () => _editItem(item),
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.delete_outline,
+                                      size: 20, color: Colors.red.shade400),
+                                  tooltip: 'Delete',
+                                  onPressed: () => deleteItemAndSync(item),
+                                ),
+                              ],
+                            ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),

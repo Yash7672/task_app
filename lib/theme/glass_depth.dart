@@ -47,7 +47,7 @@ class GlassDepthConfig {
   static const level3 = GlassDepthConfig(
     depth: GlassDepth.level3,
     opacity: 0.84,
-    blur: 24,
+    blur: 20,
     elevation: 6,
     borderColor: GlassColors.borderStrong,
     shadows: [

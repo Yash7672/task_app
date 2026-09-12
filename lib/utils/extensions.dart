@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+final DateFormat _displayFormat = DateFormat('MMM dd, yyyy');
+
 extension StringExtension on String {
   String capitalize() {
     if (isEmpty) return this;
@@ -26,7 +28,7 @@ extension DateExtension on DateTime {
     } else if (checkDate == tomorrow) {
       return 'Tomorrow';
     } else {
-      return DateFormat('MMM dd, yyyy').format(this);
+      return _displayFormat.format(this);
     }
   }
 

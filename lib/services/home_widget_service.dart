@@ -34,6 +34,11 @@ class HomeWidgetService {
   static bool _initialized = false;
   static Timer? _debounce;
 
+  /// Widget providers whose backing data changed since the last flush. The
+  /// debounced [_flush] updates ONLY these so a task mutation never re-renders
+  /// unrelated checklist/birthday/focus widgets and vice-versa.
+  static final Set<String> _dirtyProviders = {};
+
   static List<Task> _todayTasks = const [];
   static List<Habit> _habits = const [];
   static int _bestStreak = 0;
@@ -66,6 +71,13 @@ class HomeWidgetService {
     final today = DateTime(now.year, now.month, now.day);
     _todayTasks =
         allTasks.where((task) => isDueOn(task, today)).toList();
+    // Today Tasks, Progress and Quick-Add all read task data — update only
+    // those, not every widget on the home screen.
+    _markDirty({
+      _androidProviderName,
+      _progressProviderName,
+      _quickAddProviderName,
+    });
     _scheduleFlush();
   }
 
@@ -74,7 +86,15 @@ class HomeWidgetService {
   static void refreshHabits(int bestStreak, {List<Habit>? habits}) {
     _bestStreak = bestStreak;
     if (habits != null) _habits = habits;
+    // The Today's Tasks widget renders best_streak too, so a habit change
+    // touches both that and the dedicated habits widget — nothing else.
+    _markDirty({_habitsProviderName, _androidProviderName});
     _scheduleFlush();
+  }
+
+  static void _markDirty(Set<String> providers) {
+    if (kIsWeb) return;
+    _dirtyProviders.addAll(providers);
   }
 
   // ── Immediate push ─────────────────────────────────────────────────
@@ -278,7 +298,7 @@ class HomeWidgetService {
         _focusDefaultsSet = true;
       }
 
-      await _updateAllWidgets();
+      await _updatePendingWidgets();
     } catch (e) {
       debugPrint('HomeWidget flush failed: $e');
     }
@@ -464,17 +484,20 @@ class HomeWidgetService {
     }
   }
 
-  static Future<void> _updateAllWidgets() async {
-    final providers = [
-      _androidProviderName,
-      _habitsProviderName,
-      _progressProviderName,
-      _quickAddProviderName,
-      _focusProviderName,
-      _checklistProviderName,
-      _birthdaysProviderName,
-    ];
-    // Update all widgets concurrently instead of sequentially.
+  static Future<void> _updatePendingWidgets() async {
+    // When nothing is marked dirty (e.g. an explicit pushNow), fall back to a
+    // full refresh so direct callers always get the complete update.
+    var providers = _dirtyProviders.toList();
+    _dirtyProviders.clear();
+    if (providers.isEmpty) {
+      providers = const [
+        _androidProviderName,
+        _habitsProviderName,
+        _progressProviderName,
+        _quickAddProviderName,
+      ];
+    }
+    // Update all dirty widgets concurrently instead of sequentially.
     await Future.wait(
       providers.map((name) async {
         try {

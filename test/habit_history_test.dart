@@ -454,7 +454,7 @@ void main() {
       await pumpPopup(tester, habit);
 
       // Completed day carries the fire marker.
-      expect(find.byIcon(Icons.local_fire_department), findsOneWidget);
+      expect(find.text('🔥'), findsOneWidget);
 
       final dayFinder = find.byWidgetPredicate((w) =>
           w is Text && w.data == '${now.day}' && w.style?.fontSize == 14);
@@ -487,7 +487,7 @@ void main() {
 
       await pumpPopup(tester, habit);
 
-      expect(find.byIcon(Icons.local_fire_department), findsNothing);
+      expect(find.text('🔥'), findsNothing);
 
       final dayFinder = find.byWidgetPredicate((w) =>
           w is Text && w.data == '${now.day}' && w.style?.fontSize == 14);
