@@ -124,6 +124,8 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
       await NotificationHelper.cancelAllForBirthday(id);
       await dbHelper.deleteBirthday(id);
       state = AsyncValue.data(_current.where((b) => b.id != id).toList());
+      // Keep the native birthdays widget's calendar in sync after a delete.
+      _resort();
     } catch (e) {
       debugPrint('Error deleting birthday: $e');
     }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Birthday day: faint amber rounded tile so the 🎂 marker reads clearly on
+     the dark glass without overpowering the rest of the month. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#26FFB74D" />
+    <corners android:radius="8dp" />
+</shape>

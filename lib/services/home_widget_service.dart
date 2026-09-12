@@ -86,9 +86,9 @@ class HomeWidgetService {
   static void refreshHabits(int bestStreak, {List<Habit>? habits}) {
     _bestStreak = bestStreak;
     if (habits != null) _habits = habits;
-    // The Today's Tasks widget renders best_streak too, so a habit change
-    // touches both that and the dedicated habits widget — nothing else.
-    _markDirty({_habitsProviderName, _androidProviderName});
+    // A habit change only affects the dedicated Habits widget — the Today's
+    // Tasks widget no longer renders any streak, so leave it untouched.
+    _markDirty({_habitsProviderName});
     _scheduleFlush();
   }
 
@@ -232,7 +232,6 @@ class HomeWidgetService {
         HomeWidget.saveWidgetData<int>('tasks_pending', pendingCount),
         HomeWidget.saveWidgetData<int>(
             'tasks_more', allDisplayTasks.length > 5 ? allDisplayTasks.length - 5 : 0),
-        HomeWidget.saveWidgetData<int>('best_streak', _bestStreak),
         HomeWidget.saveWidgetData<String>('tasks_last_updated', now.toString()),
       ];
 
@@ -381,35 +380,39 @@ class HomeWidgetService {
 
   // ── Birthdays widget data ─────────────────────────────────────────
 
+  /// Month/day markers for EVERY saved birthday, independent of the current
+  /// date, so the native calendar can show 🎂 on the matching days of any
+  /// navigated month. Format: "MM-DD,MM-DD" with zero-padded values.
+  static String _birthdayMarkerOf(Birthday b) {
+    final m = b.birthDate.month.toString().padLeft(2, '0');
+    final d = b.birthDate.day.toString().padLeft(2, '0');
+    return '$m-$d';
+  }
+
   static Future<void> refreshBirthdays(List<Birthday> birthdays) async {
     if (kIsWeb) return;
     try {
       await init();
-      final now = DateTime.now();
-      final upcoming = birthdays
-          .where((b) => b.daysUntilNext(now: now) >= 0)
-          .toList()
-        ..sort((a, b) => a.daysUntilNext(now: now).compareTo(b.daysUntilNext(now: now)));
+      final markers =
+          birthdays.map(_birthdayMarkerOf).where((m) => m.isNotEmpty).join(',');
 
       final futures = <Future<void>>[
-        HomeWidget.saveWidgetData<int>('birthdays_count', upcoming.length),
+        HomeWidget.saveWidgetData<int>('birthdays_count', birthdays.length),
+        HomeWidget.saveWidgetData<String>('birthday_markers', markers),
       ];
 
-      for (var i = 0; i < 3; i++) {
-        if (i < upcoming.length) {
-          final b = upcoming[i];
-          final days = b.daysUntilNext(now: now);
-          final whenText = days == 0
-              ? 'Today'
-              : days == 1
-                  ? 'Tomorrow'
-                  : '${b.nextOccurrence(now: now).day} ${_monthName(b.nextOccurrence(now: now).month)}';
-          futures.add(HomeWidget.saveWidgetData<String>('birthday_name_$i', b.name));
-          futures.add(HomeWidget.saveWidgetData<String>('birthday_when_$i', whenText));
-        } else {
-          futures.add(HomeWidget.saveWidgetData<String>('birthday_name_$i', ''));
-          futures.add(HomeWidget.saveWidgetData<String>('birthday_when_$i', ''));
-        }
+      // Keep the viewed month sensible: reset only when it is missing or now
+      // in the past (the device date moved past it). Deliberate navigation to
+      // future months survives app restarts and unrelated widget pushes.
+      final now = DateTime.now();
+      final currentYyyymm = now.year * 100 + now.month;
+      final storedViewMonth =
+          await HomeWidget.getWidgetData<int>('birthday_view_month');
+      final viewMonth = (storedViewMonth ?? 0) < currentYyyymm
+          ? currentYyyymm
+          : (storedViewMonth ?? currentYyyymm);
+      if (viewMonth != storedViewMonth) {
+        futures.add(HomeWidget.saveWidgetData<int>('birthday_view_month', viewMonth));
       }
 
       futures.add(HomeWidget.saveWidgetData<String>(
@@ -422,14 +425,6 @@ class HomeWidgetService {
     } catch (e) {
       debugPrint('HomeWidget refreshBirthdays failed: $e');
     }
-  }
-
-  static String _monthName(int month) {
-    const names = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return names[month];
   }
 
   // ── Update all widgets ────────────────────────────────────────────

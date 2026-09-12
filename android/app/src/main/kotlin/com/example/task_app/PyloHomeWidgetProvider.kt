@@ -30,7 +30,6 @@ class PyloHomeWidgetProvider : HomeWidgetProvider() {
                 val total = widgetData.getInt("tasks_total", 0)
                 val done = widgetData.getInt("tasks_done", 0)
                 val pending = widgetData.getInt("tasks_pending", 0)
-                val bestStreak = widgetData.getInt("best_streak", 0)
                 val more = widgetData.getInt("tasks_more", 0)
 
                 // Header
@@ -132,14 +131,6 @@ class PyloHomeWidgetProvider : HomeWidgetProvider() {
                     setViewVisibility(R.id.widget_empty, View.VISIBLE)
                 } else {
                     setViewVisibility(R.id.widget_empty, View.GONE)
-                }
-
-                // Streak
-                if (bestStreak > 0) {
-                    setViewVisibility(R.id.widget_streak, View.VISIBLE)
-                    setTextViewText(R.id.widget_streak, "$bestStreak day streak")
-                } else {
-                    setViewVisibility(R.id.widget_streak, View.GONE)
                 }
             }
 

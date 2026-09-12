@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/glass_components.dart';
+import '../../../models/birthday_model.dart';
 import '../../../models/task_model.dart';
+import '../../../providers/birthday_provider.dart';
 import '../../../providers/focus_provider.dart';
 import '../../../providers/task_provider.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/glass_depth.dart';
+import '../../birthdays/screens/birthdays_screen.dart';
 import '../../focus/screens/focus_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../settings/screens/settings_screen.dart';
@@ -68,6 +71,7 @@ class DashboardScreen extends ConsumerWidget {
           const SliverToBoxAdapter(child: _GreetingHeader()),
           const SliverToBoxAdapter(child: _StreakSummaryCard()),
           const SliverToBoxAdapter(child: _FocusCard()),
+          const SliverToBoxAdapter(child: _BirthdaysSection()),
           SliverToBoxAdapter(
               child: _buildSectionHeader(context, 'Today', todayTasks.length)),
           ..._buildTaskSlivers(context, todayTasks),
@@ -304,6 +308,117 @@ class _FocusCard extends ConsumerWidget {
 }
 
 
+
+// ── Birthdays (today & tomorrow only) ───────────────────────────────
+
+/// Renders ONLY birthdays whose annual date falls on the device's today or
+/// tomorrow. Matching ignores the birth year (birthdays repeat every year)
+/// and DateTime(y, m, d + 1) keeps the Dec 31 → Jan 1 boundary correct.
+class _BirthdaysSection extends ConsumerWidget {
+  const _BirthdaysSection();
+
+  static bool _sameDay(Birthday birthday, DateTime date) =>
+      birthday.birthDate.month == date.month &&
+      birthday.birthDate.day == date.day;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final birthdays =
+        ref.watch(birthdayProvider).maybeWhen(data: (b) => b, orElse: () => []);
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+
+    final todays = birthdays.where((b) => _sameDay(b, today)).toList();
+    final tomorrows = birthdays.where((b) => _sameDay(b, tomorrow)).toList();
+    final count = todays.length + tomorrows.length;
+
+    // Keep Home clean: no birthdays today/tomorrow → no section at all.
+    if (count == 0) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(context, 'Birthdays', count),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: GlassSurface(
+            borderRadius: 16,
+            depth: GlassDepth.level1,
+            blur: 0,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              children: [
+                for (final b in todays)
+                  _birthdayRow(context, b, 'Today'),
+                for (final b in tomorrows)
+                  _birthdayRow(context, b, 'Tomorrow'),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _birthdayRow(BuildContext context, Birthday birthday, String label) {
+    final theme = Theme.of(context);
+    final isGlass = isGlassTheme(context);
+    final accentIcon = isGlass ? GlassColors.accent : Colors.deepPurple;
+    final accentFill = isGlass
+        ? GlassColors.accentSubtle
+        : Colors.deepPurple.withValues(alpha: 0.12);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const BirthdaysScreen())),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accentFill,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.cake, color: accentIcon, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                birthday.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: accentFill,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '$label 🎂',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: accentIcon,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // ── Today tasks ──────────────────────────────────────────────────────
 

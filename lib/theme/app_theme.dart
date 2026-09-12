@@ -560,19 +560,30 @@ class AppTheme {
         hourMinuteShape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
-        dayPeriodColor: GlassColors.accentSubtle,
+        // Selected AM/PM becomes a solid amber pill with dark ink so the
+        // choice is unmistakable; unselected stays a dark glass surface.
+        dayPeriodColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return GlassColors.accent;
+          }
+          return GlassColors.level1;
+        }),
         dayPeriodBorderSide:
             const BorderSide(color: GlassColors.borderStrong),
         dayPeriodTextColor: WidgetStateColor.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return GlassColors.accent;
+            return GlassColors.onAccent;
           }
           return GlassColors.textSecondary;
         }),
         dialBackgroundColor: GlassColors.level2,
+        // The selected dial label is painted ON TOP of the amber hand dot, so
+        // amber text on the amber hand is invisible. Dark ink keeps both the
+        // hour and minute (00-55) dial values legible while still highlighting
+        // which one is selected.
         dialTextColor: WidgetStateColor.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return GlassColors.accent;
+            return GlassColors.onAccent;
           }
           return GlassColors.textSecondary;
         }),

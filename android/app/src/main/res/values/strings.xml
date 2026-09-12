@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PYLO</string>
-    <string name="pylo_widget_description">Shows today\'s tasks and your streak</string>
+    <string name="pylo_widget_description">Shows today\'s tasks</string>
     <string name="pylo_habits_widget_description">Shows your habit streaks and progress</string>
     <string name="pylo_progress_widget_description">Shows today\'s task completion progress</string>
     <string name="pylo_quick_add_widget_description">Quickly add a new task</string>
     <string name="pylo_focus_widget_description">Shows your focus timer status</string>
     <string name="pylo_checklist_widget_description">Shows your quick checklist</string>
-    <string name="pylo_birthdays_widget_description">Shows upcoming birthdays</string>
+    <string name="pylo_birthdays_widget_description">Monthly calendar with \uD83C\uDF82 on birthday days</string>
 
     <!-- Full-screen task alarm -->
     <string name="pylo_alarm_kicker">PYLO · TASK ALARM</string>
