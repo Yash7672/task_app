@@ -20,6 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "pylo/focus"
+    private val ALARM_CHANNEL = "pylo/alarm"
     private var isLockTaskActive = false
     private var pendingWidgetAction: String? = null
     private var pendingWidgetTaskId: String? = null
@@ -72,6 +73,40 @@ class MainActivity : FlutterFragmentActivity() {
                         pendingWidgetAction = null
                         pendingWidgetTaskId = null
                         pendingWidgetHabitId = null
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "scheduleAlarm" -> {
+                        val requestCode = call.argument<Int>("requestCode") ?: 0
+                        val timeMs = call.argument<Long>("timeMs") ?: 0L
+                        val taskId = call.argument<String>("taskId").orEmpty()
+                        val title = call.argument<String>("title").orEmpty()
+                        if (requestCode <= 0 || timeMs <= 0 || taskId.isEmpty()) {
+                            result.error("bad_args", "Invalid alarm arguments", null)
+                        } else {
+                            result.success(
+                                AlarmScheduler.schedule(
+                                    this, requestCode, timeMs, taskId, title
+                                )
+                            )
+                        }
+                    }
+                    "cancelAlarm" -> {
+                        val requestCode = call.argument<Int>("requestCode") ?: 0
+                        AlarmScheduler.cancel(this, requestCode)
+                        result.success(true)
+                    }
+                    "canScheduleExactAlarms" -> {
+                        result.success(AlarmScheduler.canScheduleExact(this))
+                    }
+                    "openExactAlarmSettings" -> {
+                        AlarmScheduler.openExactAlarmSettings(this)
                         result.success(true)
                     }
                     else -> result.notImplemented()

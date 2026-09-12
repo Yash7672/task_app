@@ -59,7 +59,7 @@ class NotificationService {
 
       await NotificationHelper.zonedSchedule(
         0,
-        '⏰ Time to complete your habits!',
+        'Time to complete your habits!',
         'Don\'t break your streak! Open the app and mark your progress.',
         scheduledDate,
         platformDetails,
@@ -67,7 +67,7 @@ class NotificationService {
       );
 
       await showImmediateNotification(
-        '✅ Reminder Set!',
+        'Reminder Set!',
         'You will get daily reminders at ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
       );
 
@@ -93,14 +93,14 @@ class NotificationService {
     await NotificationHelper.ensureInitialized();
 
     final message = streakCount >= 30
-        ? '🔥 Amazing! $streakCount day streak! You\'re on fire!'
+        ? 'Amazing! $streakCount day streak! You\'re on fire!'
         : streakCount >= 10
-            ? '🌟 $streakCount day streak! Keep going!'
-            : '✅ $streakCount day streak! You\'re building a great habit!';
+            ? '$streakCount day streak! Keep going!'
+            : '$streakCount day streak! You\'re building a great habit!';
 
     await NotificationHelper.show(
       id: 2,
-      title: '🎉 Streak Update: $habitName',
+      title: 'Streak Update: $habitName',
       body: message,
     );
   }

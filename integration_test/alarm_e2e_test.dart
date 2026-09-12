@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -65,25 +66,23 @@ void main() {
     await player.dispose();
   });
 
-  testWidgets('schedules a silent full-screen alarm for the cold-start test',
+  testWidgets('schedules a native full-screen alarm for the cold-start test',
       (tester) async {
     final uri = await _installCustomAlarmFile();
-    await NotificationHelper.ensureInitialized();
-    await NotificationHelper.ensureAlarmChannel(
-      AlarmChannelConfig.fromPrefs(
-        soundId: 'custom',
-        customUri: uri,
-        vibrate: true,
-      ),
-    );
+    // Configure the GLOBAL alarm settings the way Settings > Alarm does. The
+    // native AlarmActivity reads these at ring time from the
+    // shared_preferences plugin store.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('alarm_sound_id', 'custom');
+    await prefs.setString('custom_alarm_uri', uri);
+    await prefs.setBool('alarm_vibrate', true);
+    await prefs.setInt('alarm_snooze_minutes', 5);
 
     final alarmTime = DateTime.now().add(const Duration(seconds: 40));
     await NotificationHelper.scheduleTaskAlarm(
       taskId: 'e2e-custom-sound',
       taskTitle: 'PYLO E2E Custom Sound',
       alarmTime: alarmTime,
-      soundId: 'custom',
-      customUri: uri,
     );
     debugPrint('PYLO_E2E_SCHEDULED ${alarmTime.toIso8601String()}');
     await tester.pump(const Duration(seconds: 1));

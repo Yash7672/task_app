@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/birthday_model.dart';
 import '../../../providers/birthday_provider.dart';
 import '../../../providers/preferences_provider.dart';
+import '../../../theme/app_theme.dart';
 import '../widgets/birthday_card.dart';
 
 class BirthdaysScreen extends ConsumerWidget {
@@ -17,7 +19,7 @@ class BirthdaysScreen extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('🎂 Birthdays')),
+      appBar: AppBar(title: const Text('Birthdays')),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'birthdays_fab',
         onPressed: () => _showBirthdayDialog(context, ref),
@@ -50,8 +52,10 @@ class BirthdaysScreen extends ConsumerWidget {
                     Text(
                       'Add birthdays once — PYLO reminds you every year.',
                       textAlign: TextAlign.center,
-                      style:
-                          theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                          color: isGlassTheme(context)
+                              ? GlassColors.textSecondary
+                              : Colors.grey[600]),
                     ),
                   ],
                 ),
@@ -98,7 +102,7 @@ class BirthdaysScreen extends ConsumerWidget {
         controllers: controllers,
         child: StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(birthday == null ? '🎂 Add Birthday' : '🎂 Edit Birthday'),
+          title: Text(birthday == null ? 'Add Birthday' : 'Edit Birthday'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,

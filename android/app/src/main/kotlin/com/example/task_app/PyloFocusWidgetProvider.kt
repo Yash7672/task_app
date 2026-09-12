@@ -43,7 +43,7 @@ class PyloFocusWidgetProvider : HomeWidgetProvider() {
                     setViewVisibility(R.id.widget_active, View.VISIBLE)
 
                     val modeText = if (isStrict) "LOCKED FOCUS" else "FOCUS ACTIVE"
-                    setTextViewText(R.id.widget_mode, "\uD83D\uDD12 $modeText")
+                    setTextViewText(R.id.widget_mode, "$modeText")
 
                     val mins = remainingMinutes.toString().padStart(2, '0')
                     val secs = remainingSeconds.toString().padStart(2, '0')

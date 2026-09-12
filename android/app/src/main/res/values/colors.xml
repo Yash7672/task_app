@@ -7,4 +7,19 @@
     <color name="widget_bg_color">#E6201B2A</color>
     <color name="widget_accent_color">#FFB74D</color>
     <color name="widget_group_color">#EAE6F2</color>
+    <!-- Native splash / window background. Dark so a Glass/Dark/AMOLED user
+         never sees a white flash on cold start. -->
+    <color name="pylo_splash_bg">#0B0B16</color>
+
+    <!-- Full-screen alarm surface -->
+    <color name="pylo_alarm_bg">#0B0B16</color>
+    <color name="pylo_surface_strong">#B31E2338</color>
+    <color name="pylo_border_medium">#1FFFFFFF</color>
+    <color name="pylo_border_strong">#2EFFFFFF</color>
+    <color name="pylo_text_primary">#F2F3F7</color>
+    <color name="pylo_text_secondary">#CCF2F3F7</color>
+    <color name="pylo_accent">#FFB74D</color>
+    <color name="pylo_accent_deep">#FF9D2B</color>
+    <color name="pylo_accent_subtle">#26FFB74D</color>
+    <color name="pylo_accent_border">#66FFB74D</color>
 </resources>

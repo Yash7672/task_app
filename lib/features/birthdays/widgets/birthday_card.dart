@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/birthday_model.dart';
+import '../../../theme/app_theme.dart';
 
 class BirthdayCard extends StatelessWidget {
   final Birthday birthday;
@@ -70,7 +72,7 @@ class BirthdayCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               isToday
-                  ? '🎉 Today! 🎂'
+                  ? 'Today!'
                   : days == 1
                       ? 'Tomorrow'
                       : 'In $days days',
@@ -79,8 +81,10 @@ class BirthdayCard extends StatelessWidget {
             ),
             if (birthday.phone.isNotEmpty)
               Text(birthday.phone,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: Colors.grey[600])),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: isGlassTheme(context)
+                          ? GlassColors.textSecondary
+                          : Colors.grey[600])),
           ],
         ),
         trailing: PopupMenuButton<String>(

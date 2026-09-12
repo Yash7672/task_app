@@ -28,8 +28,8 @@ class GlassDepthConfig {
 
   static const level1 = GlassDepthConfig(
     depth: GlassDepth.level1,
-    opacity: 0.08,
-    blur: 36,
+    opacity: 0.55,
+    blur: 14,
     elevation: 0,
     borderColor: GlassColors.border,
     shadows: [BoxShadow(color: Color(0x08000000), blurRadius: 20)],
@@ -37,8 +37,8 @@ class GlassDepthConfig {
 
   static const level2 = GlassDepthConfig(
     depth: GlassDepth.level2,
-    opacity: 0.12,
-    blur: 42,
+    opacity: 0.70,
+    blur: 18,
     elevation: 2,
     borderColor: GlassColors.borderMedium,
     shadows: [BoxShadow(color: Color(0x28000000), blurRadius: 24, offset: Offset(0, 6))],
@@ -46,8 +46,8 @@ class GlassDepthConfig {
 
   static const level3 = GlassDepthConfig(
     depth: GlassDepth.level3,
-    opacity: 0.18,
-    blur: 48,
+    opacity: 0.84,
+    blur: 24,
     elevation: 6,
     borderColor: GlassColors.borderStrong,
     shadows: [

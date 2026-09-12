@@ -137,7 +137,7 @@ class PyloHomeWidgetProvider : HomeWidgetProvider() {
                 // Streak
                 if (bestStreak > 0) {
                     setViewVisibility(R.id.widget_streak, View.VISIBLE)
-                    setTextViewText(R.id.widget_streak, "\uD83D\uDD25 $bestStreak day streak")
+                    setTextViewText(R.id.widget_streak, "$bestStreak day streak")
                 } else {
                     setViewVisibility(R.id.widget_streak, View.GONE)
                 }

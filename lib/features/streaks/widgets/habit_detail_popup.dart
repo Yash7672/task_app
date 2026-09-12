@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
+import '../../calendar/screens/calendar_screen.dart';
 import 'habit_day_detail_sheet.dart';
 
 /// Streak History view for a single habit: a calendar where every completed
@@ -108,24 +110,34 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
               ),
               data: (logs) {
                 final completedDates = _completedDatesFrom(logs);
+                final isGlass = isGlassTheme(context);
                 return TableCalendar(
                   firstDay: DateTime(2020),
                   lastDay: DateTime.now(),
                   focusedDay: _focusedDay,
-                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                  selectedDayPredicate: (day) =>
+                      isSameDay(_selectedDay, day),
                   calendarFormat: CalendarFormat.month,
                   startingDayOfWeek: StartingDayOfWeek.monday,
-                  headerStyle: const HeaderStyle(
-                    formatButtonVisible: false,
-                    titleCentered: true,
-                  ),
+                  headerStyle: isGlass
+                      ? PyloCalendarStyle.header(context)
+                      : const HeaderStyle(
+                          formatButtonVisible: false,
+                          titleCentered: true,
+                        ),
+                  daysOfWeekStyle: isGlass
+                      ? PyloCalendarStyle.daysOfWeek(context)
+                      : const DaysOfWeekStyle(),
+                  calendarStyle: isGlass
+                      ? PyloCalendarStyle.calendar(context)
+                      : const CalendarStyle(),
                   onDaySelected: _handleDayTap,
                   calendarBuilders: CalendarBuilders(
                     defaultBuilder: (context, date, focusedDay) =>
                         _buildDayCell(date, focusedDay, completedDates),
-                    todayBuilder: (context, date, focusedDay) => _buildDayCell(
-                        date, focusedDay, completedDates,
-                        isToday: true),
+                    todayBuilder: (context, date, focusedDay) =>
+                        _buildDayCell(date, focusedDay, completedDates,
+                            isToday: true),
                     selectedBuilder: (context, date, focusedDay) =>
                         _buildDayCell(date, focusedDay, completedDates,
                             isSelected: true),
@@ -192,9 +204,10 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
             ),
           ),
           if (isCompleted && !isFuture)
-            const Text(
-              '🔥',
-              style: TextStyle(fontSize: 9, height: 1),
+            const Icon(
+              Icons.local_fire_department,
+              size: 11,
+              color: Color(0xFFFFB74D),
             ),
         ],
       ),

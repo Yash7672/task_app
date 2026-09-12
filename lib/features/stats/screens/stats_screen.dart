@@ -37,7 +37,7 @@ class StatsScreen extends ConsumerWidget {
           _statCard(context, Icons.list_alt_rounded, Colors.blue,
               'Total Tasks', '$total'),
           const SizedBox(height: 24),
-          Text('🔥 Streaks',
+          Text('Streaks',
               style: theme.textTheme.titleLarge
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
@@ -48,7 +48,7 @@ class StatsScreen extends ConsumerWidget {
           _statCard(context, Icons.show_chart, Colors.teal,
               'Average Streak', '${(streakStats['averageStreak'] ?? 0.0).toStringAsFixed(1)} days'),
           const SizedBox(height: 24),
-          Text('🎯 Focus',
+          Text('Focus',
               style: theme.textTheme.titleLarge
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),

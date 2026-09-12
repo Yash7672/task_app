@@ -2,10 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/habit_completion_item.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/database_provider.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
+
+/// Colors that stay readable on dark glass surfaces.
+Color _secondaryText(BuildContext context) => isGlassTheme(context)
+    ? GlassColors.textSecondary
+    : Colors.grey[600]!;
+Color _hairlineBorder(BuildContext context) => isGlassTheme(context)
+    ? GlassColors.borderStrong
+    : Colors.grey.shade300;
 
 /// Bottom sheet shown when tapping any date on the streak history calendar.
 /// Shows status and streak/miss controls for historical dates, plus the
@@ -216,9 +226,12 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
               // ── Header ──
               Row(
                 children: [
-                  Text(
-                    _isCompleted ? '🔥' : '📅',
-                    style: const TextStyle(fontSize: 24),
+                  Icon(
+                    _isCompleted ? Icons.local_fire_department : Icons.event_note,
+                    size: 22,
+                    color: _isCompleted
+                        ? const Color(0xFFFFB74D)
+                        : _secondaryText(context),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -233,7 +246,7 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                         Text(
                           widget.habit.name,
                           style: theme.textTheme.bodySmall
-                              ?.copyWith(color: Colors.grey[600]),
+                              ?.copyWith(color: _secondaryText(context)),
                         ),
                       ],
                     ),
@@ -272,7 +285,7 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                           foregroundColor: Colors.green,
                           side: BorderSide(
                             color: _isCompleted
-                                ? Colors.grey.shade300
+                                ? _hairlineBorder(context)
                                 : Colors.green,
                           ),
                           minimumSize: const Size.fromHeight(44),
@@ -292,7 +305,7 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                           foregroundColor: Colors.red,
                           side: BorderSide(
                             color: !_isCompleted
-                                ? Colors.grey.shade300
+                                ? _hairlineBorder(context)
                                 : Colors.red,
                           ),
                           minimumSize: const Size.fromHeight(44),
@@ -315,15 +328,15 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                     child: CircularProgressIndicator(),
                   ),
                 )
-              else if (_isCompleted) ...[
-                if (_items.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      'No checklist recorded for this day.',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    ),
-                  )
+              else if (_isCompleted) ...[                  if (_items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'No checklist recorded for this day.',
+                        style: TextStyle(
+                            color: _secondaryText(context), fontSize: 14),
+                      ),
+                    )
                 else
                   ...(_items.map((item) => _CompletionTile(
                         item: item,
@@ -364,7 +377,8 @@ class _HabitDayDetailSheetState extends ConsumerState<_HabitDayDetailSheet> {
                     _isToday
                         ? 'Not completed today. Use the Streak button above to mark it, or complete from the habit card.'
                         : 'Not completed on this day. Use the Streak button above to mark it manually.',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    style: TextStyle(
+                        color: _secondaryText(context), fontSize: 14),
                   ),
                 ),
               ],
@@ -432,7 +446,11 @@ class _CompletionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = item.completed ? Colors.green : Colors.grey;
+    final color = item.completed
+        ? Colors.green
+        : (isGlassTheme(context)
+            ? GlassColors.textMuted
+            : Colors.grey);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -457,7 +475,7 @@ class _CompletionTile extends StatelessWidget {
                     item.completed ? null : TextDecoration.lineThrough,
                 color: item.completed
                     ? Theme.of(context).colorScheme.onSurface
-                    : Colors.grey[600],
+                    : _secondaryText(context),
               ),
             ),
           ),

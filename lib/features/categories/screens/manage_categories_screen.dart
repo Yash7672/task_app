@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../models/category_icons.dart';
 import '../../../models/category_model.dart';
 import '../../../providers/task_provider.dart';
 
@@ -8,8 +9,6 @@ const _palette = [
   '#4CAF50', '#2196F3', '#9C27B0', '#FF9800', '#E91E63',
   '#607D8B', '#F44336', '#FFC107', '#795548', '#00BCD4',
 ];
-
-const _emojis = ['🧘', '🎓', '📚', '💪', '🛍️', '💼', '🩺', '💰', '👨‍👩‍👧‍👦', '✈️', '🏠', '🎵', '🎮', '🐶', '⭐'];
 
 class ManageCategoriesScreen extends ConsumerWidget {
   const ManageCategoriesScreen({super.key});
@@ -46,8 +45,8 @@ class ManageCategoriesScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: Text(category.icon ?? '🏷️',
-                        style: const TextStyle(fontSize: 20)),
+                    child: Icon(categoryIcon(category.icon),
+                        color: _parseColor(category.colorHex), size: 22),
                   ),
                 ),
                 title: Text(category.name,
@@ -83,7 +82,7 @@ class ManageCategoriesScreen extends ConsumerWidget {
       {TaskCategory? category}) async {
     final nameController = TextEditingController(text: category?.name ?? '');
     String selectedColor = category?.colorHex ?? _palette.first;
-    String selectedEmoji = category?.icon ?? _emojis.first;
+    String selectedIcon = category?.icon ?? categoryIconNames.first;
 
     final result = await showDialog<TaskCategory>(
       context: context,
@@ -110,12 +109,14 @@ class ManageCategoriesScreen extends ConsumerWidget {
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: _emojis
-                      .map((e) => ChoiceChip(
-                            label: Text(e),
-                            selected: selectedEmoji == e,
+                  children: categoryIconNames
+                      .map((name) => ChoiceChip(
+                            avatar: Icon(categoryIcon(name), size: 18),
+                            label: const SizedBox.shrink(),
+                            selected:
+                                categoryIcon(selectedIcon) == categoryIcon(name),
                             onSelected: (_) =>
-                                setDialogState(() => selectedEmoji = e),
+                                setDialogState(() => selectedIcon = name),
                           ))
                       .toList(),
                 ),
@@ -162,7 +163,7 @@ class ManageCategoriesScreen extends ConsumerWidget {
                     id: category?.id,
                     name: nameController.text.trim(),
                     colorHex: selectedColor,
-                    icon: selectedEmoji,
+                    icon: selectedIcon,
                   ),
                 );
               },

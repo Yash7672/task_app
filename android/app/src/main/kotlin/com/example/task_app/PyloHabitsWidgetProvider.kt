@@ -30,9 +30,9 @@ class PyloHabitsWidgetProvider : HomeWidgetProvider() {
 
                 // Header
                 val headerText = if (bestStreak > 0) {
-                    "\uD83D\uDD25 Habit Streaks \u2022 $bestStreak day best"
+                    "Habit Streaks \u2022 $bestStreak day best"
                 } else {
-                    "\uD83D\uDD25 Habit Streaks"
+                    "Habit Streaks"
                 }
                 setTextViewText(R.id.widget_header, headerText)
 

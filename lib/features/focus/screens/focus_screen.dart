@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/focus_session_model.dart';
 import '../../../providers/focus_provider.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
 import 'focus_active_screen.dart';
 
 class FocusScreen extends ConsumerStatefulWidget {
@@ -79,14 +81,20 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                       ?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text('Today: ${_formatMinutes(focus.minutesToday)} focused',
-                  style: TextStyle(color: Colors.grey[600])),
+                  style: TextStyle(
+                      color: isGlassTheme(context)
+                          ? GlassColors.textSecondary
+                          : Colors.grey[600])),
               const SizedBox(height: 12),
               if (sessions.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(24),
                   child: Center(
                     child: Text('No sessions yet.',
-                        style: TextStyle(color: Colors.grey[600])),
+                        style: TextStyle(
+                            color: isGlassTheme(context)
+                                ? GlassColors.textSecondary
+                                : Colors.grey[600])),
                   ),
                 )
               else
@@ -96,7 +104,11 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
                         s.completed
                             ? Icons.check_circle
                             : Icons.stop_circle_outlined,
-                        color: s.completed ? Colors.green : Colors.grey,
+                        color: s.completed
+                            ? Colors.green
+                            : (isGlassTheme(context)
+                                ? GlassColors.textMuted
+                                : Colors.grey),
                       ),
                       title: Text(s.label.isEmpty ? 'Focus session' : s.label),
                       subtitle: Text(
@@ -356,7 +368,12 @@ class _SetupViewState extends ConsumerState<_SetupView> {
             onPressed: () => _startFocus(selectedTask?.title),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 18),
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: isGlassTheme(context)
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.deepPurple,
+              foregroundColor: isGlassTheme(context)
+                  ? GlassColors.onAccent
+                  : null,
             ),
             icon: Icon(
               _selectedMode == FocusMode.strict
@@ -377,8 +394,10 @@ class _SetupViewState extends ConsumerState<_SetupView> {
             child: Text(
               'Calls and notifications still arrive.\nPYLO just helps you stay on one thing.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: Colors.grey[600]),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isGlassTheme(context)
+                      ? GlassColors.textSecondary
+                      : Colors.grey[600]),
             ),
           ),
         ],
@@ -447,7 +466,15 @@ class _ModeCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(icon, size: 32, color: isSelected ? color : Colors.grey),
+            Icon(
+                icon,
+                size: 32,
+                color: isSelected
+                    ? color
+                    : (isGlassTheme(context)
+                        ? GlassColors.textMuted
+                        : Colors.grey),
+              ),
             const SizedBox(height: 8),
             Text(
               title,

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
 import '../widgets/habit_card.dart';
 import '../../settings/screens/settings_screen.dart';
 
@@ -22,7 +24,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🔥 Streaks'),
+        title: const Text('Streaks'),
         actions: [
           IconButton(
             icon: const Icon(Icons.stacked_bar_chart_outlined),
@@ -70,10 +72,10 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
                     Text(
                       'Stay consistent every day. Create your first streak.',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.grey[600]),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isGlassTheme(context)
+                              ? GlassColors.textSecondary
+                              : Colors.grey[600]),
                     ),
                     const SizedBox(height: 20),
                     FilledButton.icon(
@@ -112,7 +114,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('🔥 Active Streaks',
+                                Text('Active Streaks',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium
@@ -126,8 +128,7 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
                                         ?.copyWith(
                                             fontWeight: FontWeight.w800)),
                                 const SizedBox(height: 6),
-                                Text(
-                                    '🏆 Longest ${summary['longestStreak']} Days',
+                                Text('Longest ${summary['longestStreak']} Days',
                                     style:
                                         Theme.of(context).textTheme.bodyMedium),
                               ],
@@ -136,7 +137,9 @@ class _StreaksScreenState extends ConsumerState<StreaksScreen> {
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.35),
+                                color: isGlassTheme(context)
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.white.withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(16)),
                             child: Text('${summary['completedToday']}',
                                 style: Theme.of(context)

@@ -8,4 +8,11 @@
     <string name="pylo_focus_widget_description">Shows your focus timer status</string>
     <string name="pylo_checklist_widget_description">Shows your quick checklist</string>
     <string name="pylo_birthdays_widget_description">Shows upcoming birthdays</string>
+
+    <!-- Full-screen task alarm -->
+    <string name="pylo_alarm_kicker">PYLO · TASK ALARM</string>
+    <string name="pylo_alarm_snooze">SNOOZE</string>
+    <string name="pylo_alarm_channel_name">Alarm</string>
+    <string name="pylo_alarm_channel_desc">Shown while a task alarm is ringing</string>
+    <string name="pylo_alarm_notif_title">Task alarm is ringing</string>
 </resources>

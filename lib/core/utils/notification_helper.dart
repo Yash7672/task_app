@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import 'alarm_sound_service.dart';
+import '../services/alarm_channel.dart';
 
 /// Notification ID namespace offsets to prevent hash collisions.
 /// Tasks use `id.hashCode`, birthdays use `id.hashCode + _birthdayOffset`.
@@ -198,11 +199,9 @@ class NotificationHelper {
     1, 5, 10, 15, 30, 60, 120, 180, 1440,
   ];
 
-  static const String alarmChannelId = 'pylo_alarm_channel';
-
   /// SharedPreferences key remembering the last alarm already surfaced to the
-  /// UI, so a cold start from an already-handled full-screen alarm never
-  /// re-opens (and re-rings) the same alarm a second time.
+  /// UI, so a cold start from an already-handled legacy alarm never re-opens
+  /// (and re-rings) the same alarm a second time.
   static const String _keyLastHandledAlarm = 'pylo_last_handled_alarm';
 
   static const AndroidNotificationDetails _androidDetails =
@@ -241,17 +240,10 @@ class NotificationHelper {
     icon: '@mipmap/launcher_icon',
   );
 
-  /// Current alarm channel configuration.  Stays in sync with the persisted
-  /// Settings preferences; any change triggers a delete+recreate of the
-  /// alarm channel (Android channels are immutable once created) followed by
-  /// a reschedule of pending alarms.
-  static AlarmChannelConfig _alarmConfig = const AlarmChannelConfig();
-
-  static AlarmChannelConfig get alarmConfig => _alarmConfig;
-
-  /// Fired every time an alarm actually goes off (either the app was woken by
-  /// the full-screen intent, or the user tapped the alarm notification).
-  /// Listeners (e.g. main.dart) present the full-screen alarm UI.
+  /// Fired every time an alarm fires through the LEGACY notification path
+  /// (a full-screen intent that brought the app forward). Listeners (e.g.
+  /// main.dart) present the in-app AlarmScreen. Modern task alarms ring
+  /// natively (AlarmActivity) and never reach this stream.
   static final StreamController<AlarmInfo> _alarmController =
       StreamController<AlarmInfo>.broadcast();
 
@@ -263,30 +255,6 @@ class NotificationHelper {
   /// Used by the AlarmScreen to suppress duplicate pushes while an alarm is
   /// already on screen.
   static bool isAlarmOpen = false;
-
-  /// Notification details for a REAL (full-screen) alarm.  The notification is
-  /// deliberately silenced: the OS would otherwise play the channel sound
-  /// directly, and FileProvider content URIs are unreadable once the app
-  /// process is dead — exactly why custom music regressed to the default tone.
-  /// The selected music is played by the in-app audioplayers engine once the
-  /// full-screen alarm UI is on screen.
-  static _alarmDetails(AlarmChannelConfig config) {
-    return AndroidNotificationDetails(
-      alarmChannelId,
-      'PYLO Alarms',
-      channelDescription: 'Full-screen alarm alerts for your tasks',
-      importance: Importance.max,
-      priority: Priority.max,
-      playSound: false,
-      enableVibration: config.vibrate,
-      fullScreenIntent: true,
-      category: AndroidNotificationCategory.alarm,
-      // FLAG_INSISTENT = 0x4: keeps the (silent) alert active until the user
-      // acts — vibration repeats for a real alarm while the music loops in-app.
-      additionalFlags: Int32List.fromList([4]),
-      icon: '@mipmap/launcher_icon',
-    );
-  }
 
   /// Ensure the notification plugin is initialized exactly once.
   /// Safe to call from any context; idempotent.
@@ -329,54 +297,6 @@ class NotificationHelper {
         AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.requestNotificationsPermission();
     await androidImpl?.requestExactAlarmsPermission();
-  }
-
-  /// (Re)builds the alarm channel to match [config] then schedules the
-  /// effects that depend on editing settings. Deleting and recreating the
-  /// channel is required because Android channels are immutable once created —
-  /// a sound or vibration change must drop the old channel entirely.
-  static Future<void> reconfigureAlarmChannel(AlarmChannelConfig config) async {
-    if (kIsWeb) return;
-    await ensureInitialized();
-    _alarmConfig = config;
-    await _recreateAlarmChannel();
-  }
-
-  /// Called once at startup (after [init]) with the persisted preferences so
-  /// the channel always reflects the stored sound/vibration, migrating older
-  /// builds whose alarm channel was created with the default sound.
-  static Future<void> ensureAlarmChannel(AlarmChannelConfig config) async {
-    if (kIsWeb) return;
-    await ensureInitialized();
-    _alarmConfig = config;
-    await _recreateAlarmChannel();
-  }
-
-  static Future<void> _recreateAlarmChannel() async {
-    if (kIsWeb) return;
-    final androidImpl = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    try {
-      await androidImpl?.deleteNotificationChannel(alarmChannelId);
-    } catch (e) {
-      debugPrint('deleteNotificationChannel failed: $e');
-    }
-    try {
-      await androidImpl?.createNotificationChannel(
-        AndroidNotificationChannel(
-          alarmChannelId,
-          'PYLO Alarms',
-          description: 'Full-screen alarm alerts for your tasks',
-          importance: Importance.max,
-          playSound: false,
-          sound: null,
-          enableVibration: _alarmConfig.vibrate,
-          audioAttributesUsage: AudioAttributesUsage.alarm,
-        ),
-      );
-    } catch (e) {
-      debugPrint('createNotificationChannel failed: $e');
-    }
   }
 
   /// Decodes a notification response (warm start: the alarm's full-screen
@@ -553,19 +473,18 @@ class NotificationHelper {
     }
   }
 
-  /// Schedules a single alarm notification at [alarmTime] for the task.
-  /// The alarm fires exactly at the specified time through the dedicated
-  /// alarm channel with a full-screen intent carrying an AlarmPayload that
-  /// lets the app present the matching full-screen alarm UI.
+  /// Schedules a REAL task alarm at [alarmTime]. The alarm is armed through
+  /// Android's AlarmManager itself (AlarmChannel → AlarmScheduler): it fires
+  /// at [alarmTime] and the full-screen AlarmActivity rings natively whether
+  /// the app is open, backgrounded, or dead — never gated behind a
+  /// notification tap. Sound, vibration and snooze come from the global
+  /// Settings at ring time.
   static Future<void> scheduleTaskAlarm({
     required String taskId,
     required String taskTitle,
     required DateTime alarmTime,
-    String? soundId,
-    String? customUri,
   }) async {
     if (kIsWeb) return;
-    await ensureInitialized();
 
     final now = DateTime.now();
     if (!alarmTime.isAfter(now)) {
@@ -574,72 +493,31 @@ class NotificationHelper {
     }
 
     final id = NotificationId.taskAlarm(taskId);
-    final timeStr =
-        '${alarmTime.hour.toString().padLeft(2, '0')}:${alarmTime.minute.toString().padLeft(2, '0')}';
-    final payload = AlarmPayload.encode(
+    await AlarmChannel.schedule(
+      requestCode: id,
+      alarmTime: alarmTime,
       taskId: taskId,
       taskTitle: taskTitle,
-      alarmTime: alarmTime,
-      soundId: soundId,
-      customUri: customUri,
     );
-
-    // Use the dedicated alarm channel with MAX importance + full-screen intent
-    // + a SILENT notification.  The music/vibration the user picked is played
-    // by AlarmScreen's audioplayers engine when the full-screen UI mounts.  The
-    // payload lets us route the fired alarm to its screen (and sound).
-    try {
-      await _notifications.zonedSchedule(
-        id,
-        '⏰ Task Alarm',
-        '$taskTitle — alarm at $timeStr',
-        _toTZDate(alarmTime),
-        _details(_alarmDetails(_alarmConfig)),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: payload,
-      );
-      debugPrint('Scheduled alarm id=$id: "$taskTitle" at $alarmTime (alarm channel)');
-    } catch (e) {
-      debugPrint('Exact alarm schedule failed for id=$id ($e); retrying inexact');
-      try {
-        await _notifications.zonedSchedule(
-          id,
-          '⏰ Task Alarm',
-          '$taskTitle — alarm at $timeStr',
-          _toTZDate(alarmTime),
-          _details(_alarmDetails(_alarmConfig)),
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
-          payload: payload,
-        );
-      } catch (e2) {
-        debugPrint('Failed to schedule alarm id=$id: $e2');
-      }
-    }
   }
 
   /// Re-alarms the same task [duration] from now. Cancels the original
-  /// firing alarm first so the two can never ring together.  [soundId] and
-  /// [customUri] carry the task's sound override across the re-schedule.
+  /// firing alarm first so the two can never ring together, then re-arms the
+  /// same request code natively (a snoozed alarm still rings through the
+  /// full-screen AlarmActivity with current global settings).
   static Future<void> snoozeTaskAlarm({
     required String taskId,
     required String taskTitle,
     required Duration duration,
-    String? soundId,
-    String? customUri,
   }) async {
     if (kIsWeb) return;
-    await ensureInitialized();
-    await _notifications.cancel(NotificationId.taskAlarm(taskId));
-    await scheduleTaskAlarm(
+    final id = NotificationId.taskAlarm(taskId);
+    await AlarmChannel.cancel(requestCode: id);
+    await AlarmChannel.schedule(
+      requestCode: id,
+      alarmTime: DateTime.now().add(duration),
       taskId: taskId,
       taskTitle: taskTitle,
-      alarmTime: DateTime.now().add(duration),
-      soundId: soundId,
-      customUri: customUri,
     );
   }
 
@@ -662,6 +540,9 @@ class NotificationHelper {
       return;
     }
     await ensureInitialized();
+    // Any armed native AlarmManager alarm for this task is withdrawn too, so
+    // a deleted/completed/edited task can never ring late via the native path.
+    await AlarmChannel.cancel(requestCode: NotificationId.taskAlarm(taskId));
     try {
       final ids = <int>{NotificationId.taskAlarm(taskId)};
       if (reminderMinutes != null && reminderMinutes.isNotEmpty) {
@@ -782,10 +663,10 @@ class NotificationHelper {
       ).subtract(Duration(days: days));
 
       final body = days == 0
-          ? "🎉 Today is $name's birthday! ($dateStr)"
+          ? "Today is $name's birthday! ($dateStr)"
           : days == 1
-              ? "🎂 $name's birthday is tomorrow! ($dateStr)"
-              : "🎂 $name's birthday in $days days ($dateStr)";
+              ? "$name's birthday is tomorrow! ($dateStr)"
+              : "$name's birthday in $days days ($dateStr)";
 
       // When the requested lead time has already passed but the birthday
       // itself is still ahead, schedule on the birthday instead of letting
@@ -809,7 +690,7 @@ class NotificationHelper {
         key: '$birthdayId-$days',
         // Offset birthday IDs into a separate namespace to avoid collisions
         // with task reminder IDs that use raw hashCode.
-        title: days == 0 ? 'Birthday Today 🎂' : 'Birthday Reminder 🎂',
+        title: days == 0 ? 'Birthday Today' : 'Birthday Reminder',
         body: body,
         firstOccurrence: firstOccurrence,
       );
@@ -847,7 +728,7 @@ class NotificationHelper {
     try {
       await _notifications.show(
         FocusNotificationIds.ongoing,
-        isStrict ? '🔒 Strict Focus' : '🎯 Focus Mode',
+        isStrict ? 'Strict Focus' : 'Focus Mode',
         mins > 0 ? '$label • $mins min remaining' : '$label • finishing…',
         _details(_focusDetails),
       );
@@ -864,7 +745,7 @@ class NotificationHelper {
     try {
       await _notifications.zonedSchedule(
         FocusNotificationIds.complete,
-        '🎉 Focus Complete!',
+        'Focus Complete!',
         'Nice work — $label session finished.',
         _toTZDate(endTime),
         _details(_androidDetails),
@@ -961,29 +842,20 @@ class NotificationHelper {
     return true;
   }
 
-  /// Check if SCHEDULE_EXACT_ALARM permission is granted on Android 12+.
-  /// Returns true on non-Android or older Android versions.
+  /// Whether Android can arm EXACT alarms (SCHEDULE_EXACT_ALARM special access,
+  /// Android 12+; always true on older versions). The native scheduler falls
+  /// back to a best-effort inexact alarm when false so rings still happen,
+  /// just possibly a little late.
   static Future<bool> canScheduleExactAlarms() async {
     if (kIsWeb) return true;
-    await ensureInitialized();
-    final androidImpl = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    if (androidImpl == null) return true;
-    final areNotificationsEnabled = await androidImpl.areNotificationsEnabled();
-    // On Android 12+ (API 31+), exact alarms require explicit permission.
-    // flutter_local_notifications v17 handles this via requestExactAlarmsPermission().
-    // If the user denied it, scheduled alarms will use inexact mode.
-    return areNotificationsEnabled ?? true;
+    return AlarmChannel.canScheduleExactAlarms();
   }
 
-  /// Android 12+: asks the user for the special "full-screen intent alarms"
-  /// access that lets a fired alarm take over the whole screen.
-  static Future<bool?> requestFullScreenAlarmPermission() async {
-    if (kIsWeb) return null;
-    await ensureInitialized();
-    final androidImpl = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    return await androidImpl?.requestFullScreenIntentPermission();
+  /// Android 12+: opens the system "Alarms & reminders" screen so the user can
+  /// grant exact alarm access. No-op on older versions.
+  static Future<void> openExactAlarmSettings() async {
+    if (kIsWeb) return;
+    await AlarmChannel.openExactAlarmSettings();
   }
 }
 

@@ -34,7 +34,7 @@ class PyloBirthdaysWidgetProvider : HomeWidgetProvider() {
 
                 val count = widgetData.getInt("birthdays_count", 0)
 
-                setTextViewText(R.id.widget_header, "\uD83C\uDF82 BIRTHDAYS")
+                setTextViewText(R.id.widget_header, "BIRTHDAYS")
 
                 val nameViews = intArrayOf(
                     R.id.widget_birthday_0, R.id.widget_birthday_1, R.id.widget_birthday_2

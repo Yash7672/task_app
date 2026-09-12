@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/checklist_model.dart';
 import '../../../providers/checklist_provider.dart';
+import '../../../theme/app_theme.dart';
 import '../widgets/checklist_item.dart';
+
+Color _secondaryText(BuildContext context) => isGlassTheme(context)
+    ? GlassColors.textSecondary
+    : Colors.grey[600]!;
 
 class ChecklistScreen extends ConsumerWidget {
   const ChecklistScreen({super.key});
@@ -46,8 +52,8 @@ class ChecklistScreen extends ConsumerWidget {
                     Text(
                       'Create simple lists like shopping or packing.',
                       textAlign: TextAlign.center,
-                      style:
-                          theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: _secondaryText(context)),
                     ),
                   ],
                 ),
@@ -233,7 +239,8 @@ class _ChecklistDetailScreenState extends ConsumerState<ChecklistDetailScreen> {
               children: [
                 Text('$pending left',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                        color: _secondaryText(context),
+                        fontWeight: FontWeight.w500)),
                 const Spacer(),
                 if (items.any((i) => i.completed))
                   TextButton.icon(
@@ -248,7 +255,7 @@ class _ChecklistDetailScreenState extends ConsumerState<ChecklistDetailScreen> {
             child: items.isEmpty
                 ? Center(
                     child: Text('Add your first item below.',
-                        style: TextStyle(color: Colors.grey[600])))
+                        style: TextStyle(color: _secondaryText(context))))
                 : ListView.builder(
                     padding: const EdgeInsets.all(8),
                     itemCount: items.length,

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/utils/alarm_sound_service.dart';
 import '../../../core/utils/notification_helper.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
 
 class AddEditTaskScreen extends ConsumerStatefulWidget {
   final Task? taskToEdit;
@@ -30,10 +31,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
   List<ChecklistItemData> _checklist = [];
   bool _alarmEnabled = false;
   DateTime? _alarmTime;
-
-  /// Per-task alarm sound override (null = use the global Settings sound).
-  PyloAlarmSound? _alarmSound;
-  String? _customAlarmUri;
 
   final List<String> _priorities = [
     'Critical',
@@ -74,10 +71,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
       _checklist = List<ChecklistItemData>.from(widget.taskToEdit!.checklist);
       _alarmEnabled = widget.taskToEdit!.alarmEnabled;
       _alarmTime = widget.taskToEdit!.alarmTime;
-      final storedSound = widget.taskToEdit!.alarmSound;
-      _alarmSound =
-          storedSound == null ? null : PyloAlarmSound.fromId(storedSound);
-      _customAlarmUri = widget.taskToEdit!.alarmSoundUri;
     } else {
       _selectedReminders = List<int>.from(
           ref.read(settingsPreferencesProvider).reminderMinutes);
@@ -165,12 +158,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
         isDeleted: widget.taskToEdit?.isDeleted ?? false,
         isFavorite: widget.taskToEdit?.isFavorite ?? false,
         isPinned: widget.taskToEdit?.isPinned ?? false,
-        alarmSound: _alarmSound?.name,
-        alarmSoundType: _alarmSound == null
-            ? null
-            : (_alarmSound == PyloAlarmSound.custom ? 'custom' : 'builtin'),
-        alarmSoundUri:
-            _alarmSound == PyloAlarmSound.custom ? _customAlarmUri : null,
         snoozeDuration: widget.taskToEdit?.snoozeDuration ?? 5,
         vibrationEnabled: widget.taskToEdit?.vibrationEnabled ?? true,
         completedAt: widget.taskToEdit?.completedAt,
@@ -213,9 +200,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
           taskId: task.id,
           taskTitle: task.title,
           alarmTime: _alarmTime!,
-          soundId: _alarmSound?.name,
-          customUri:
-              _alarmSound == PyloAlarmSound.custom ? _customAlarmUri : null,
         );
       }
 
@@ -475,50 +459,6 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                     }
                   },
                 ),
-              if (_alarmEnabled)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Alarm Sound'),
-                  subtitle: Text(
-                    _alarmSound == null
-                        ? 'Default (use Settings)'
-                        : _alarmSound!.label,
-                  ),
-                  trailing: DropdownButton<PyloAlarmSound?>(
-                    value: _alarmSound,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      const DropdownMenuItem<PyloAlarmSound?>(
-                        value: null,
-                        child: Text('Default (use Settings)'),
-                      ),
-                      ...PyloAlarmSound.values.map(
-                        (sound) => DropdownMenuItem<PyloAlarmSound?>(
-                          value: sound,
-                          child: Text(sound.label),
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) async {
-                      if (value == null) return;
-                      if (value == PyloAlarmSound.custom) {
-                        final uri =
-                            await AlarmSoundService.pickAndImportCustomSound();
-                        if (uri == null) return;
-                        if (!mounted) return;
-                        setState(() {
-                          _alarmSound = value;
-                          _customAlarmUri = uri;
-                        });
-                      } else {
-                        setState(() {
-                          _alarmSound = value;
-                          _customAlarmUri = null;
-                        });
-                      }
-                    },
-                  ),
-                ),
               const SizedBox(height: 12),
               Text('Checklist',
                   style: Theme.of(context).textTheme.titleSmall),
@@ -554,7 +494,11 @@ class _AddEditTaskScreenState extends ConsumerState<AddEditTaskScreen> {
                             decoration: _checklist[i].done
                                 ? TextDecoration.lineThrough
                                 : null,
-                            color: _checklist[i].done ? Colors.grey : null,
+                            color: _checklist[i].done
+                                ? (isGlassTheme(context)
+                                    ? GlassColors.textMuted
+                                    : Colors.grey)
+                                : null,
                           ),
                         ),
                         onChanged: (val) {

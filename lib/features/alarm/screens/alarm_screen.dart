@@ -153,8 +153,6 @@ class _AlarmScreenState extends ConsumerState<AlarmScreen>
         taskId: widget.alarm.taskId,
         taskTitle: _taskTitle,
         duration: Duration(minutes: snoozeMinutes),
-        soundId: widget.alarm.soundId,
-        customUri: widget.alarm.customUri,
       );
     } catch (e) {
       debugPrint('Snooze failed: $e');
@@ -215,9 +213,9 @@ class _AlarmScreenState extends ConsumerState<AlarmScreen>
     const white = Colors.white;
     switch (mode) {
       case AppThemeMode.glass:
-        return _AlarmColors(
-          bgStart: const Color(0xFF07070F),
-          bgEnd: const Color(0xFF0D0D18),
+        return const _AlarmColors(
+          bgStart: Color(0xFF07070F),
+          bgEnd: Color(0xFF0D0D18),
           surfaceBorder: GlassColors.border,
           surfaceBg: GlassColors.surfaceOpaqueDark,
           clockColor: white,

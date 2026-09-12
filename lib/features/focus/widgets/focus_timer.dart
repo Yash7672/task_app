@@ -114,7 +114,7 @@ class _FocusTimerDisplayState extends State<_FocusTimerDisplay> {
               ),
               const SizedBox(height: 4),
               Text(
-                isStrict ? '🔒 STRICT FOCUS' : '🎯 FOCUS MODE',
+                isStrict ? 'STRICT FOCUS' : 'FOCUS MODE',
                 style: theme.textTheme.labelLarge?.copyWith(
                     color: isStrict
                         ? theme.colorScheme.primary

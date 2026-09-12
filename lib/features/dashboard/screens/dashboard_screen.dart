@@ -102,10 +102,10 @@ class _GreetingHeader extends ConsumerWidget {
 
     final hour = DateTime.now().hour;
     final greeting = hour < 12
-        ? 'Good Morning 👋'
+        ? 'Good Morning'
         : hour < 18
-            ? 'Good Afternoon 👋'
-            : 'Good Evening 👋';
+            ? 'Good Afternoon'
+            : 'Good Evening';
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -117,8 +117,10 @@ class _GreetingHeader extends ConsumerWidget {
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text('Stay focused, stay offline, and keep your day on track.',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: Colors.grey[600])),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  color: isGlassTheme(context)
+                      ? GlassColors.textSecondary
+                      : Colors.grey[600])),
           const SizedBox(height: 12),
           _glassWrap(
             context,
@@ -262,15 +264,17 @@ class _FocusCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('🎯 Focus',
+                  Text('Focus',
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   Text(
                     focusState.minutesToday > 0
                         ? '${focusState.minutesToday}m focused today'
                         : 'Start a deep work session',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: Colors.grey[600]),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: isGlassTheme(context)
+                            ? GlassColors.textSecondary
+                            : Colors.grey[600]),
                   ),
                 ],
               ),
@@ -302,7 +306,7 @@ class _TodayTasksSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(context, 'Today', todayTasks.length),
-        _buildTaskList(todayTasks),
+        _buildTaskList(context, todayTasks),
       ],
     );
   }
@@ -353,13 +357,16 @@ Widget _buildSectionHeader(BuildContext context, String title, int count) {
   );
 }
 
-Widget _buildTaskList(List<Task> tasks) {
+Widget _buildTaskList(BuildContext context, List<Task> tasks) {
   if (tasks.isEmpty) {
     return Padding(
       padding: const EdgeInsets.all(32.0),
       child: Center(
           child: Text('No tasks here.',
-              style: TextStyle(color: Colors.grey[500]))),
+              style: TextStyle(
+                  color: isGlassTheme(context)
+                      ? GlassColors.textMuted
+                      : Colors.grey[500]))),
     );
   }
   return ListView.separated(

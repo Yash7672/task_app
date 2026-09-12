@@ -2,11 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/notification_helper.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../features/tasks/screens/add_edit_task_screen.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
 import '../../../utils/extensions.dart';
+
+/// Text colors that stay readable on dark glass surfaces.
+Color _secondaryText(BuildContext context) =>
+    isGlassTheme(context)
+        ? GlassColors.textSecondary
+        : Colors.grey[600]!;
+Color _mutedText(BuildContext context) =>
+    isGlassTheme(context)
+        ? GlassColors.textMuted
+        : Colors.grey[500]!;
+Color _mutedIcon(BuildContext context) =>
+    isGlassTheme(context)
+        ? GlassColors.textMuted
+        : Colors.grey;
 
 class TaskListItem extends ConsumerWidget {
   final Task task;
@@ -94,7 +110,9 @@ class TaskListItem extends ConsumerWidget {
                             decoration: task.isCompleted
                                 ? TextDecoration.lineThrough
                                 : null,
-                            color: task.isCompleted ? Colors.grey : null,
+                            color: task.isCompleted
+                                    ? _mutedIcon(context)
+                                    : null,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -118,8 +136,8 @@ class TaskListItem extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
                                 color: task.isCompleted
-                                    ? Colors.grey
-                                    : Colors.grey[600]),
+                                    ? _mutedText(context)
+                                    : _secondaryText(context)),
                           ),
                         ),
                       const SizedBox(height: 6),
@@ -141,11 +159,11 @@ class TaskListItem extends ConsumerWidget {
                           ),
                           const SizedBox(width: 8),
                           Icon(Icons.calendar_today,
-                              size: 12, color: Colors.grey[500]),
+                              size: 12, color: _mutedText(context)),
                           const SizedBox(width: 4),
                           Text(task.dueDate.toDisplayString(),
                               style: theme.textTheme.labelSmall
-                                  ?.copyWith(color: Colors.grey[500])),
+                                  ?.copyWith(color: _mutedText(context))),
                           if (task.alarmEnabled && task.alarmTime != null) ...[
                             const SizedBox(width: 8),
                             const Icon(Icons.alarm,
@@ -240,8 +258,6 @@ class TaskListItem extends ConsumerWidget {
         taskId: task.id,
         taskTitle: task.title,
         alarmTime: task.alarmTime!,
-        soundId: task.alarmSound,
-        customUri: task.alarmSoundUri,
       );
     }
   }
@@ -328,7 +344,7 @@ class TaskListItem extends ConsumerWidget {
                   if (task.description.isNotEmpty)
                     Text(task.description,
                         style: theme.textTheme.bodyLarge
-                            ?.copyWith(color: Colors.grey[700])),
+                            ?.copyWith(color: _secondaryText(context))),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -351,7 +367,7 @@ class TaskListItem extends ConsumerWidget {
                   if (task.checklist.isEmpty)
                     Text('No checklist items.',
                         style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: Colors.grey[600]))
+                            ?.copyWith(color: _secondaryText(context)))
                   else
                     Column(
                       children: task.checklist
@@ -364,7 +380,7 @@ class TaskListItem extends ConsumerWidget {
                                       : Icons.check_circle_outline,
                                   color: item.done
                                       ? theme.colorScheme.primary
-                                      : Colors.grey,
+                                      : _mutedIcon(context),
                                 ),
                                 title: Text(
                                   item.text,
@@ -372,7 +388,9 @@ class TaskListItem extends ConsumerWidget {
                                     decoration: item.done
                                         ? TextDecoration.lineThrough
                                         : null,
-                                    color: item.done ? Colors.grey : null,
+                                    color: item.done
+                                        ? _mutedIcon(context)
+                                        : null,
                                   ),
                                 ),
                               ))

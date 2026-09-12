@@ -8,6 +8,7 @@ import '../../../core/utils/backup_helper_native.dart'
     if (dart.library.js) '../../../core/utils/backup_helper_web.dart' as backup_helper;
 import '../../../core/utils/notification_helper.dart';
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/birthday_model.dart';
 import '../../../providers/birthday_provider.dart';
 import '../../../providers/checklist_provider.dart';
@@ -21,6 +22,7 @@ import '../../../services/backup/backup_service.dart';
 import '../../../services/backup/restore_service.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/home_widget_service.dart';
+import '../../../theme/app_theme.dart';
 import '../../categories/screens/manage_categories_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 
@@ -296,10 +298,6 @@ class SettingsScreen extends ConsumerWidget {
                       } else {
                         await notifier.setAlarmSoundId(value.name);
                       }
-                      await _applyCurrentAlarmConfig(ref);
-                      if (!kIsWeb) {
-                        await NotificationHelper.requestFullScreenAlarmPermission();
-                      }
                     },
                     items: [
                       for (final sound in PyloAlarmSound.values)
@@ -318,7 +316,6 @@ class SettingsScreen extends ConsumerWidget {
                     await ref
                         .read(settingsPreferencesProvider.notifier)
                         .setAlarmVibrate(value);
-                    await _applyCurrentAlarmConfig(ref);
                   },
                 ),
                 ListTile(
@@ -345,12 +342,9 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 ListTile(
                   title: const Text('Preview alarm'),
-                  subtitle: const Text('Play the selected sound and vibration'),
+                  subtitle: const Text('Play the selected sound'),
                   trailing: const Icon(Icons.play_circle_outline),
                   onTap: () async {
-                    if (!kIsWeb) {
-                      await NotificationHelper.requestFullScreenAlarmPermission();
-                    }
                     await NotificationHelper.previewAlarm(
                       AlarmChannelConfig(
                         sound: PyloAlarmSound.fromId(prefs.alarmSoundId),
@@ -360,6 +354,7 @@ class SettingsScreen extends ConsumerWidget {
                     );
                   },
                 ),
+                const _ExactAlarmAccessTile(),
               ],
             ),
           ),
@@ -534,40 +529,23 @@ class SettingsScreen extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
       child: Text(title,
-          style: Theme.of(context)
-              .textTheme
-              .titleSmall
-              ?.copyWith(fontWeight: FontWeight.bold, color: Colors.grey[600])),
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isGlassTheme(context)
+                  ? GlassColors.textMuted
+                  : Colors.grey[600])),
     );
-  }
-
-  /// Rebuilds the alarm channel to the persisted sound/vibration config, then
-  /// reschedules pending task alarms (a channel delete+recreate drops any
-  /// alarms that were scheduled on the old channel).
-  Future<void> _applyCurrentAlarmConfig(WidgetRef ref) async {
-    final prefs = ref.read(settingsPreferencesProvider);
-    await NotificationHelper.reconfigureAlarmChannel(
-      AlarmChannelConfig(
-        sound: PyloAlarmSound.fromId(prefs.alarmSoundId),
-        customUri: prefs.customAlarmUri,
-        vibrate: prefs.alarmVibrate,
-      ),
-    );
-    if (prefs.notificationsEnabled) {
-      try {
-        await ref.read(taskProvider.notifier).rescheduleAllTaskReminders();
-      } catch (e) {
-        debugPrint('Failed to reschedule alarms after config change: $e');
-      }
-    }
   }
 
   String _alarmSoundLabel(SettingsPreferences prefs) {
     final sound = PyloAlarmSound.fromId(prefs.alarmSoundId);
     if (sound == PyloAlarmSound.custom) {
-      return prefs.customAlarmUri == null
-          ? 'Custom (no file picked)'
-          : 'Custom audio file';
+      final uri = prefs.customAlarmUri;
+      if (uri == null || uri.isEmpty) {
+        return 'Custom (no file picked)';
+      }
+      final name = uri.split('/').last;
+      return 'Custom — $name';
     }
     return sound.label;
   }
@@ -957,6 +935,57 @@ class _BiometricTileState extends ConsumerState<_BiometricTile> {
                   .setBiometricEnabled(value);
             }
           : null,
+    );
+  }
+}
+
+/// Surfaces the Android 12+ SCHEDULE_EXACT_ALARM state and opens the system
+/// "Alarms & reminders" screen so the user can allow on-time rings.
+/// On older Android the tile reports "allowed" and the tap is a no-op.
+class _ExactAlarmAccessTile extends ConsumerStatefulWidget {
+  const _ExactAlarmAccessTile();
+
+  @override
+  ConsumerState<_ExactAlarmAccessTile> createState() =>
+      _ExactAlarmAccessTileState();
+}
+
+class _ExactAlarmAccessTileState extends ConsumerState<_ExactAlarmAccessTile> {
+  bool? _canScheduleExact;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final can = await NotificationHelper.canScheduleExactAlarms();
+    if (mounted) setState(() => _canScheduleExact = can);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isGlass = isGlassTheme(context);
+    final subtitle = switch (_canScheduleExact) {
+      true => 'Allowed — task alarms ring on time',
+      false => 'Restricted — alarms may be delayed a bit',
+      null => 'Checking…',
+    };
+    return ListTile(
+      title: const Text('Exact alarm access'),
+      subtitle: Text(subtitle),
+      leading: Icon(
+        _canScheduleExact == true
+            ? Icons.verified_outlined
+            : Icons.warning_amber_outlined,
+        color: isGlass ? GlassColors.textMuted : null,
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        await NotificationHelper.openExactAlarmSettings();
+        await _refresh();
+      },
     );
   }
 }

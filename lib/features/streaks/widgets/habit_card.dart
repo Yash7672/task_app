@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
 import 'habit_complete_sheet.dart';
 import 'habit_detail_popup.dart';
+
+/// Text/icon colors that stay readable on dark glass surfaces.
+Color _mutedText(BuildContext context) => isGlassTheme(context)
+    ? GlassColors.textMuted
+    : Colors.grey[500]!;
+Color _mutedControl(BuildContext context) =>
+    isGlassTheme(context) ? GlassColors.textMuted : Colors.grey;
 
 class HabitCard extends ConsumerWidget {
   final Habit habit;
@@ -67,7 +76,7 @@ class HabitCard extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall
-                                ?.copyWith(color: Colors.grey[500]),
+                                ?.copyWith(color: _mutedText(context)),
                           ),
                         ],
                       ],
@@ -85,7 +94,9 @@ class HabitCard extends ConsumerWidget {
                       border: isCompletedToday
                           ? null
                           : Border.all(
-                              color: Colors.grey.withValues(alpha: 0.4),
+                              color: isGlassTheme(context)
+                                  ? GlassColors.borderStrong
+                                  : Colors.grey.withValues(alpha: 0.4),
                               width: 1,
                             ),
                     ),
@@ -99,7 +110,7 @@ class HabitCard extends ConsumerWidget {
                           size: 14,
                           color: isCompletedToday
                               ? Colors.white
-                              : Colors.grey[500],
+                              : _mutedText(context),
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -109,7 +120,7 @@ class HabitCard extends ConsumerWidget {
                             fontWeight: FontWeight.w700,
                             color: isCompletedToday
                                 ? Colors.white
-                                : Colors.grey[500],
+                                : _mutedText(context),
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -129,7 +140,9 @@ class HabitCard extends ConsumerWidget {
                       icon: Icons.local_fire_department,
                       label: 'Current Streak',
                       value: '$effectiveStreak Days',
-                      color: effectiveStreak > 0 ? Colors.orange : Colors.grey,
+                      color: effectiveStreak > 0
+                          ? Colors.orange
+                          : _mutedControl(context),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -150,12 +163,12 @@ class HabitCard extends ConsumerWidget {
               Row(
                 children: [
                   Icon(Icons.calendar_today_outlined,
-                      size: 14, color: Colors.grey[500]),
+                      size: 14, color: _mutedText(context)),
                   const SizedBox(width: 6),
                   Text(
                     'Last Completed: ${habit.getLastCompletedLabel(referenceDate: DateTime.now())}',
                     style: theme.textTheme.bodySmall
-                        ?.copyWith(color: Colors.grey[500]),
+                        ?.copyWith(color: _mutedText(context)),
                   ),
                 ],
               ),
@@ -178,10 +191,14 @@ class HabitCard extends ConsumerWidget {
                       ),
                       style: FilledButton.styleFrom(
                         backgroundColor: isCompletedToday
-                            ? Colors.grey.withValues(alpha: 0.25)
+                            ? (isGlassTheme(context)
+                                ? GlassColors.level2
+                                : Colors.grey.withValues(alpha: 0.25))
                             : Colors.green,
                         foregroundColor: isCompletedToday
-                            ? Colors.grey[600]
+                            ? (isGlassTheme(context)
+                                ? GlassColors.textMuted
+                                : Colors.grey[600])
                             : Colors.white,
                         minimumSize: const Size.fromHeight(42),
                         shape: RoundedRectangleBorder(
@@ -197,7 +214,7 @@ class HabitCard extends ConsumerWidget {
                     icon: const Icon(Icons.edit_outlined, size: 20),
                     tooltip: 'Edit',
                     style: IconButton.styleFrom(
-                      foregroundColor: Colors.grey[600],
+                      foregroundColor: _mutedText(context),
                     ),
                   ),
                   IconButton(
@@ -359,7 +376,7 @@ class _InfoTile extends StatelessWidget {
                   label,
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey[500],
+                    color: _mutedText(context),
                     fontWeight: FontWeight.w500,
                   ),
                 ),

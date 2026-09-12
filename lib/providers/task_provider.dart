@@ -260,8 +260,6 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
             taskId: updatedTask.id,
             taskTitle: updatedTask.title,
             alarmTime: updatedTask.alarmTime!,
-            soundId: updatedTask.alarmSound,
-            customUri: updatedTask.alarmSoundUri,
           );
         }
       }
@@ -324,8 +322,6 @@ try {
             taskId: regenerated.id,
             taskTitle: regenerated.title,
             alarmTime: regenerated.alarmTime!,
-            soundId: regenerated.alarmSound,
-            customUri: regenerated.alarmSoundUri,
           );
         }
       } catch (e) {
@@ -366,8 +362,6 @@ try {
             taskId: task.id,
             taskTitle: task.title,
             alarmTime: task.alarmTime!,
-            soundId: task.alarmSound,
-            customUri: task.alarmSoundUri,
           );
         }
       } catch (e) {

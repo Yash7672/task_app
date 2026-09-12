@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/checklist_model.dart';
 import '../../../providers/checklist_provider.dart';
+import '../../../theme/app_theme.dart';
 
 class ChecklistItemTile extends ConsumerWidget {
   final ChecklistItem item;
@@ -33,7 +35,11 @@ class ChecklistItemTile extends ConsumerWidget {
           style: theme.textTheme.bodyLarge?.copyWith(
             decoration:
                 item.completed ? TextDecoration.lineThrough : null,
-            color: item.completed ? Colors.grey : null,
+            color: item.completed
+                ? (isGlassTheme(context)
+                    ? GlassColors.textMuted
+                    : Colors.grey)
+                : null,
           ),
         ),
         onChanged: (_) =>

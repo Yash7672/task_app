@@ -24,6 +24,10 @@ Future<void> main() async {
   StartupBenchmark.reset();
   StartupBenchmark.mark('main_entered');
 
+  // Load the persisted theme BEFORE the first frame so a Dark/AMOLED/Glass
+  // user never gets a white Light-theme flash on cold start.
+  final initialThemeMode = await loadInitialThemeMode();
+
   // Install a global error handler so framework/build errors are captured
   // instead of killing the app silently. Errors are logged in debug; in
   // release they are swallowed but the app keeps running.
@@ -51,8 +55,11 @@ Future<void> main() async {
   }
 
   runApp(
-    const ProviderScope(
-      child: TaskFlowApp(),
+    ProviderScope(
+      overrides: [
+        initialThemeModeProvider.overrideWith((ref) => initialThemeMode),
+      ],
+      child: const TaskFlowApp(),
     ),
   );
 
@@ -178,20 +185,9 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp>
       ]);
       debugPrint('PYLO_Init milestone: initializers done (${sw.elapsedMilliseconds}ms)');
 
-      // The alarm channel must be (re)built to the persisted sound/vibration
-      // config AFTER init but BEFORE pending alarms are (re)scheduled — a
-      // channel delete+recreate drops any alarms scheduled on the old one.
-      final alarmConfig = AlarmChannelConfig.fromPrefs(
-        soundId: prefs.alarmSoundId,
-        customUri: prefs.customAlarmUri,
-        vibrate: prefs.alarmVibrate,
-      );
-      await NotificationHelper.ensureAlarmChannel(alarmConfig).catchError((e) {
-        if (kDebugMode) debugPrint('ensureAlarmChannel failed: $e');
-      });
-
-      // Cold start: the app was launched directly by an alarm's full-screen
-      // intent (already pushed above via the stream on warm starts).
+      // Cold start: the app was launched directly by a legacy alarm's
+      // full-screen intent (already pushed above via the stream on warm
+      // starts). Modern task alarms ring natively and never reach this path.
       final pendingAlarm = await NotificationHelper.pendingLaunchAlarm();
       if (pendingAlarm != null) {
         debugPrint('PYLO_ColdStart presenting alarm: ${pendingAlarm.taskTitle}');
@@ -238,10 +234,12 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp>
 
   Widget _glassBackground(BuildContext context, Widget? child) {
     return DecoratedBox(
+      position: DecorationPosition.background,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
+          stops: [0.0, 0.5, 1.0],
           colors: [
             GlassColors.bgGradientStart,
             GlassColors.bg,
@@ -252,14 +250,15 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp>
       child: Stack(
         children: [
           // Ambient lighting glows that give the glass depth. These are
-          // static (never animated) so blur cost stays zero here.
+          // static (never animated) so blur cost stays zero here. Alphas are
+          // kept very low so the ambience reads as a soft sheen, never as a
+          // colored screen.
           Positioned(
             top: -80,
             right: -60,
             child: _ambientOrb(
               size: 260,
               color: GlassColors.glow,
-              blur: 120,
             ),
           ),
           Positioned(
@@ -268,16 +267,6 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp>
             child: _ambientOrb(
               size: 300,
               color: GlassColors.glowSoft,
-              blur: 140,
-            ),
-          ),
-          Positioned(
-            top: MediaQuery.sizeOf(context).height * 0.35,
-            left: MediaQuery.sizeOf(context).width * 0.4,
-            child: _ambientOrb(
-              size: 160,
-              color: GlassColors.deepAccentGlow,
-              blur: 90,
             ),
           ),
           child ?? const SizedBox.shrink(),
@@ -286,13 +275,13 @@ class _TaskFlowAppState extends ConsumerState<TaskFlowApp>
     );
   }
 
+  /// A static radial "orb" that softly tints the ambient background. Uses
+  /// only a gradient (no ImageFilter) so it costs nothing at runtime.
   Widget _ambientOrb({
     required double size,
     required Color color,
-    required double blur,
   }) {
-    return Opacity(
-      opacity: 0.45,
+    return IgnorePointer(
       child: Container(
         width: size,
         height: size,

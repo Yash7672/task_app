@@ -150,12 +150,12 @@ class GlassCard extends StatelessWidget {
       return result;
     }
     return GlassSurface(
-      child: child,
       padding: padding,
       margin: margin,
       depth: GlassDepth.level2,
       borderRadius: 18,
       onTap: onTap,
+      child: child,
     );
   }
 }
@@ -199,16 +199,26 @@ class GlassButton extends StatelessWidget {
       gradient: outlined
           ? null
           : const LinearGradient(
-              colors: [GlassColors.deepAccent, GlassColors.deepAccentStrong],
+              colors: [GlassColors.accent, GlassColors.accentStrong],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-      color: outlined ? GlassColors.level1 : null,
+      color: outlined ? GlassColors.level2 : null,
       border: Border.all(
-        color: outlined ? GlassColors.borderStrong : GlassColors.border,
+        color: outlined
+            ? GlassColors.borderStrong
+            : Colors.transparent,
         width: 1,
       ),
-      boxShadow: [GlassDepthConfig.level2.shadows.first],
+      boxShadow: [
+        BoxShadow(
+          color: outlined
+              ? const Color(0x28000000)
+              : GlassColors.accentGlow,
+          blurRadius: 14,
+          offset: const Offset(0, 4),
+        ),
+      ],
     );
 
     return GestureDetector(
@@ -225,7 +235,7 @@ class GlassButton extends StatelessWidget {
             style: TextStyle(
               color: outlined
                   ? GlassColors.textPrimary
-                  : Colors.white,
+                  : GlassColors.onAccent,
               fontSize: 15,
               fontWeight: FontWeight.w600,
               fontFamily: 'Inter',
@@ -436,10 +446,10 @@ Future<T?> showGlassBottomSheet<T>(
         return child;
       }
       return GlassSurface(
-        child: child,
         borderRadius: 24,
         depth: GlassDepth.level3,
         padding: const EdgeInsets.only(bottom: 24),
+        child: child,
       );
     },
   );

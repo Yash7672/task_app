@@ -461,21 +461,21 @@ class DatabaseHelper {
     await _createV8Tables(db);
 
     final defaultCategories = [
-      {'id': '1', 'name': 'Personal', 'colorHex': '#4CAF50', 'icon': '🧘'},
-      {'id': '2', 'name': 'College', 'colorHex': '#2196F3', 'icon': '🎓'},
-      {'id': '3', 'name': 'Study', 'colorHex': '#9C27B0', 'icon': '📚'},
-      {'id': '4', 'name': 'Gym', 'colorHex': '#FF9800', 'icon': '💪'},
-      {'id': '5', 'name': 'Shopping', 'colorHex': '#E91E63', 'icon': '🛍️'},
-      {'id': '6', 'name': 'Work', 'colorHex': '#607D8B', 'icon': '💼'},
-      {'id': '7', 'name': 'Health', 'colorHex': '#F44336', 'icon': '🩺'},
-      {'id': '8', 'name': 'Finance', 'colorHex': '#FFC107', 'icon': '💰'},
+      {'id': '1', 'name': 'Personal', 'colorHex': '#4CAF50', 'icon': 'person'},
+      {'id': '2', 'name': 'College', 'colorHex': '#2196F3', 'icon': 'school'},
+      {'id': '3', 'name': 'Study', 'colorHex': '#9C27B0', 'icon': 'menu_book'},
+      {'id': '4', 'name': 'Gym', 'colorHex': '#FF9800', 'icon': 'fitness_center'},
+      {'id': '5', 'name': 'Shopping', 'colorHex': '#E91E63', 'icon': 'shopping_bag'},
+      {'id': '6', 'name': 'Work', 'colorHex': '#607D8B', 'icon': 'work'},
+      {'id': '7', 'name': 'Health', 'colorHex': '#F44336', 'icon': 'medical_services'},
+      {'id': '8', 'name': 'Finance', 'colorHex': '#FFC107', 'icon': 'account_balance_wallet'},
       {
         'id': '9',
         'name': 'Family',
         'colorHex': '#795548',
-        'icon': '👨‍👩‍👧‍👦'
+        'icon': 'family_restroom'
       },
-      {'id': '10', 'name': 'Travel', 'colorHex': '#00BCD4', 'icon': '✈️'},
+      {'id': '10', 'name': 'Travel', 'colorHex': '#00BCD4', 'icon': 'flight_takeoff'},
     ];
 
     final batch = db.batch();

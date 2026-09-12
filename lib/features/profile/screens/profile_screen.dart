@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/profile_model.dart';
 import '../../../providers/profile_provider.dart';
+import '../../../theme/app_theme.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -171,8 +173,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     profile.name.trim().isEmpty
                         ? 'U'
                         : profile.name.trim()[0].toUpperCase(),
-                    style:
-                        const TextStyle(fontSize: 32, color: Colors.white),
+                    style: TextStyle(
+                        fontSize: 32,
+                        color: isGlassTheme(context)
+                            ? GlassColors.onAccent
+                            : Colors.white),
                   ),
           ),
           Positioned(
@@ -183,10 +188,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary,
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
+                border: Border.all(
+                    color: isGlassTheme(context)
+                        ? GlassColors.surfaceOpaqueDark
+                        : Colors.white,
+                    width: 2),
               ),
-              child: const Icon(Icons.camera_alt,
-                  size: 16, color: Colors.white),
+              child: Icon(Icons.camera_alt,
+                  size: 16,
+                  color: isGlassTheme(context)
+                      ? GlassColors.onAccent
+                      : Colors.white),
             ),
           ),
         ],
@@ -268,10 +280,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 8),
                   Text(profile.bio,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.grey[700])),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isGlassTheme(context)
+                              ? GlassColors.textSecondary
+                              : Colors.grey[700])),
                   const SizedBox(height: 24),
                   ListTile(
                     leading: const Icon(Icons.email),

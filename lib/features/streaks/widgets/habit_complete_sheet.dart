@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/dialog_disposer.dart';
+import '../../../core/widgets/glass_components.dart';
 import '../../../models/habit_log_item.dart';
 import '../../../models/habit_model.dart';
 import '../../../providers/task_provider.dart';
+import '../../../theme/app_theme.dart';
 
 Future<void> showHabitCompleteSheet(
   BuildContext context,
@@ -128,7 +130,9 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
       subtitleColor = Colors.green;
     } else {
       subtitle = 'What did you do today? (optional)';
-      subtitleColor = Colors.grey[600]!;
+      subtitleColor = isGlassTheme(context)
+          ? GlassColors.textSecondary
+          : Colors.grey[600]!;
     }
 
     void addItemAndSync(String value) {
@@ -207,9 +211,13 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
             if (items.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(
+                child:                Text(
                   'No entries yet. Add what you completed — or just hit Complete.',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  style: TextStyle(
+                      color: isGlassTheme(context)
+                          ? GlassColors.textSecondary
+                          : Colors.grey[600],
+                      fontSize: 13),
                 ),
               )
             else
@@ -219,7 +227,10 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
                   margin: const EdgeInsets.only(bottom: 6),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.grey.shade300),
+                    side: BorderSide(
+                        color: isGlassTheme(context)
+                            ? GlassColors.borderMedium
+                            : Colors.grey.shade300),
                   ),
                   child: ListTile(
                     dense: true,
@@ -262,10 +273,14 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
                     : '✓ Complete Today'),
                 style: FilledButton.styleFrom(
                   backgroundColor: isCompletedOnSelected
-                      ? Colors.grey.shade400
+                      ? (isGlassTheme(context)
+                          ? GlassColors.level2
+                          : Colors.grey.shade400)
                       : Colors.green,
                   foregroundColor: isCompletedOnSelected
-                      ? Colors.grey.shade800
+                      ? (isGlassTheme(context)
+                          ? GlassColors.textMuted
+                          : Colors.grey.shade800)
                       : Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
@@ -279,11 +294,11 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
   }
 
   String _milestoneMessage(int streak) {
-    if (streak == 7) return '🎉 7-day streak unlocked!';
-    if (streak == 30) return '🔥 30-day streak unlocked!';
-    if (streak == 50) return '🏆 50-day streak unlocked!';
-    if (streak == 100) return '💎 100-day streak unlocked!';
-    if (streak == 365) return '🌟 365-day streak unlocked!';
-    return '🔥 +1 day! Keep going!';
+    if (streak == 7) return '7-day streak unlocked!';
+    if (streak == 30) return '30-day streak unlocked!';
+    if (streak == 50) return '50-day streak unlocked!';
+    if (streak == 100) return '100-day streak unlocked!';
+    if (streak == 365) return '365-day streak unlocked!';
+    return '+1 day. Keep going!';
   }
 }
