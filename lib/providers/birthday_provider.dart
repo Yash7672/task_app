@@ -44,7 +44,20 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
     super.dispose();
   }
 
-  Future<void> loadBirthdays() async {
+  Future<void>? _loadInFlight;
+
+  /// Loads all birthdays, deduplicating concurrent calls (the constructor
+  /// auto-load and [rescheduleAllReminders] from startup share one query).
+  Future<void> loadBirthdays() {
+    final inFlight = _loadInFlight;
+    if (inFlight != null) return inFlight;
+    final run = _load();
+
+    _loadInFlight = run.whenComplete(() => _loadInFlight = null);
+    return _loadInFlight!;
+  }
+
+  Future<void> _load() async {
     try {
       final birthdays = await dbHelper.getAllBirthdays();
       final sorted = [...birthdays]..sort((a, b) =>
@@ -135,6 +148,10 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
   /// user turns Birthday reminders ON in Settings — without this, birthdays
   /// added while notifications were off would never fire.
   Future<void> rescheduleAllReminders() async {
+    // Wait for the (possibly in-flight) initial load so that on a cold start
+    // the list is populated before scheduling — otherwise reboot-time reminder
+    // rescheduling would silently skip every birthday.
+    await loadBirthdays();
     for (final birthday in _current) {
       try {
         await NotificationHelper.scheduleBirthdayReminders(
@@ -148,9 +165,6 @@ class BirthdayNotifier extends StateNotifier<AsyncValue<List<Birthday>>> {
       } catch (e) {
         debugPrint('Failed to reschedule birthday ${birthday.id}: $e');
       }
-    }
-    if (_current.isNotEmpty) {
-      await loadBirthdays();
     }
   }
 }

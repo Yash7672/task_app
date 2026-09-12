@@ -14,8 +14,9 @@ class FocusTimer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final focus = ref.watch(focusProvider);
-    final session = focus.active;
+    // Select only `active`: the 1 s state ticker updates other fields, and a
+    // plain watch here would rebuild the whole dial 60×/min.
+    final session = ref.watch(focusProvider.select((s) => s.active));
 
     if (session == null) {
       return SizedBox(width: size, height: size);

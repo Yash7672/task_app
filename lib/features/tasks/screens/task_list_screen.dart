@@ -25,14 +25,12 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
     super.dispose();
   }
 
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year && date.month == now.month && date.day == now.day;
-  }
-
   @override
   Widget build(BuildContext context) {
     final tasks = ref.watch(allTasksProvider);
+    // Single clock read for the whole build; per-task DateTime.now() calls
+    // used to create a fresh clock value for every task in the list.
+    final now = DateTime.now();
     final showArchived = _showArchived || _filter == 'Archived';
     final archivedTasks = showArchived
         ? ref.watch(archivedTasksProvider).valueOrNull ?? []
@@ -45,7 +43,10 @@ class _TaskListScreenState extends ConsumerState<TaskListScreen> {
           task.notes.toLowerCase().contains(_queryLower);
 
       final matchesFilter = switch (_filter) {
-        'Today' => _isToday(task.dueDate),
+        'Today' =>
+          task.dueDate.year == now.year &&
+              task.dueDate.month == now.month &&
+              task.dueDate.day == now.day,
         'Completed' => task.isCompleted,
         'Pending' => !task.isCompleted,
         'Favorites' => task.isFavorite,

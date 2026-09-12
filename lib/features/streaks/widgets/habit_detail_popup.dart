@@ -110,10 +110,13 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
               ),
               data: (logs) {
                 final completedDates = _completedDatesFrom(logs);
+                // One clock read for the whole grid instead of a fresh
+                // DateTime.now() per calendar cell.
+                final now = DateTime.now();
                 final isGlass = isGlassTheme(context);
                 return TableCalendar(
                   firstDay: DateTime(2020),
-                  lastDay: DateTime.now(),
+                  lastDay: now,
                   focusedDay: _focusedDay,
                   selectedDayPredicate: (day) =>
                       isSameDay(_selectedDay, day),
@@ -134,12 +137,12 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
                   onDaySelected: _handleDayTap,
                   calendarBuilders: CalendarBuilders(
                     defaultBuilder: (context, date, focusedDay) =>
-                        _buildDayCell(date, focusedDay, completedDates),
+                        _buildDayCell(date, focusedDay, completedDates, now),
                     todayBuilder: (context, date, focusedDay) =>
-                        _buildDayCell(date, focusedDay, completedDates,
+                        _buildDayCell(date, focusedDay, completedDates, now,
                             isToday: true),
                     selectedBuilder: (context, date, focusedDay) =>
-                        _buildDayCell(date, focusedDay, completedDates,
+                        _buildDayCell(date, focusedDay, completedDates, now,
                             isSelected: true),
                   ),
                 );
@@ -154,7 +157,8 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
   Widget _buildDayCell(
     DateTime date,
     DateTime focusedDay,
-    Set<DateTime> completedDates, {
+    Set<DateTime> completedDates,
+    DateTime now, {
     bool isToday = false,
     bool isSelected = false,
   }) {
@@ -163,7 +167,7 @@ class _HabitDetailPopupState extends ConsumerState<HabitDetailPopup> {
     }
 
     final colorScheme = Theme.of(context).colorScheme;
-    final isFuture = date.isAfter(DateTime.now());
+    final isFuture = date.isAfter(now);
     final isCompleted = completedDates.contains(
       DateTime(date.year, date.month, date.day),
     );

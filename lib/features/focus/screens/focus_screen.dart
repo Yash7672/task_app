@@ -141,6 +141,9 @@ class _SetupView extends ConsumerStatefulWidget {
 }
 
 class _SetupViewState extends ConsumerState<_SetupView> {
+  // Guards against double-pushing FocusActiveScreen when the Start button is
+  // tapped rapidly before the first push completes.
+  bool _startingFocus = false;
   int _selectedMinutes = 25;
   bool _isCustomDuration = false;
   final TextEditingController _customDurationController =
@@ -406,22 +409,28 @@ class _SetupViewState extends ConsumerState<_SetupView> {
   }
 
   Future<void> _startFocus(String? taskTitle) async {
-    final label = taskTitle ??
-        (_labelController.text.trim().isNotEmpty
-            ? _labelController.text.trim()
-            : 'Focus session');
+    if (_startingFocus) return;
+    _startingFocus = true;
+    try {
+      final label = taskTitle ??
+          (_labelController.text.trim().isNotEmpty
+              ? _labelController.text.trim()
+              : 'Focus session');
 
-    await ref.read(focusProvider.notifier).startFocus(
-          label: label,
-          taskId: _selectedTaskId,
-          minutes: _effectiveMinutes,
-          mode: _selectedMode,
+      await ref.read(focusProvider.notifier).startFocus(
+            label: label,
+            taskId: _selectedTaskId,
+            minutes: _effectiveMinutes,
+            mode: _selectedMode,
+          );
+
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FocusActiveScreen()),
         );
-
-    if (mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const FocusActiveScreen()),
-      );
+      }
+    } finally {
+      _startingFocus = false;
     }
   }
 }

@@ -251,7 +251,9 @@ class _FocusCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final focusState = ref.watch(focusProvider);
+    // Select the int so the 1 s focus ticker does not rebuild this card.
+    final minutesToday =
+        ref.watch(focusProvider.select((s) => s.minutesToday));
     final theme = Theme.of(context);
 
     return Padding(
@@ -284,8 +286,8 @@ class _FocusCard extends ConsumerWidget {
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   Text(
-                    focusState.minutesToday > 0
-                        ? '${focusState.minutesToday}m focused today'
+                    minutesToday > 0
+                        ? '${minutesToday}m focused today'
                         : 'Start a deep work session',
                     style: theme.textTheme.bodySmall?.copyWith(
                         color: isGlassTheme(context)

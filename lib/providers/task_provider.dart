@@ -435,46 +435,25 @@ final todayTasksProvider = Provider<List<Task>>((ref) {
   }).toList();
 });
 
-final upcomingTasksProvider = Provider<List<Task>>((ref) {
-  final tasks = ref.watch(allTasksProvider);
-  final now = DateTime.now();
-  final startOfNextDay = DateTime(now.year, now.month, now.day + 1);
-
-  return tasks.where((task) {
-    return !task.dueDate.isBefore(startOfNextDay);
-  }).toList();
-});
-
-final overdueTasksProvider = Provider<List<Task>>((ref) {
-  final tasks = ref.watch(allTasksProvider);
-  final now = DateTime.now();
-  final todayMs = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-
-  return tasks.where((task) {
-    return task.dueDate.millisecondsSinceEpoch < todayMs && !task.isCompleted;
-  }).toList();
-});
-
-final favoritesProvider = Provider<List<Task>>((ref) {
-  final tasks = ref.watch(allTasksProvider);
-  return tasks.where((task) => task.isFavorite).toList();
-});
-
 /// Tasks grouped by their local calendar date. Recomputes only when the task
 /// list changes — calendar day-taps and rebuilds read this cached map instead
 /// of re-scanning every task.
 final tasksByDayProvider =
-    Provider<Map<DateTime, List<Task>>>((ref) {
+    Provider<Map<int, List<Task>>>((ref) {
   final tasks = ref.watch(allTasksProvider);
-  final byDay = <DateTime, List<Task>>{};
+  final byDay = <int, List<Task>>{};
   for (final task in tasks) {
     if (task.isDeleted || task.isArchived) continue;
-    final day =
-        DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-    byDay.putIfAbsent(day, () => []).add(task);
+    final key = _dayKey(task.dueDate);
+    byDay.putIfAbsent(key, () => []).add(task);
   }
   return byDay;
 });
+
+/// Stable integer calendar-day key (`yyyyMMdd`) for a local date. Used by
+/// [tasksByDayProvider] so day lookups are a single int hash instead of a
+/// fresh DateTime allocation per calendar cell.
+int _dayKey(DateTime date) => date.year * 10000 + date.month * 100 + date.day;
 
 final archivedTasksProvider =
     FutureProvider.autoDispose<List<Task>>((ref) async {
@@ -609,21 +588,10 @@ String habitDateKey(DateTime date) {
   return '${date.year}-$m-$d';
 }
 
-/// Composite provider key for a day's completion checklist snapshot.
-String completionChecklistKey(String habitId, String dateKey) =>
-    '$habitId|$dateKey';
-
-final habitCompletionChecklistProvider =
-    FutureProvider.autoDispose.family<List<HabitCompletionItem>, String>(
-        (ref, key) async {
-  final separator = key.indexOf('|');
-  final habitId = key.substring(0, separator);
-  final dateKey = key.substring(separator + 1);
-  final dbHelper = ref.watch(databaseProvider);
-  return dbHelper.getCompletionChecklist(habitId, dateKey);
-});
-
-final habitLogItemsProvider = StateNotifierProvider.family<
+/// Per-log editable item list. autoDispose keeps notifiers for closed days
+/// from accumulating forever, and re-loads fresh from the DB each time a
+/// day's sheet is reopened (the sheet is the only writer of these rows).
+final habitLogItemsProvider = StateNotifierProvider.autoDispose.family<
     HabitLogItemsNotifier,
     List<HabitLogItem>,
     String>((ref, logId) {
@@ -806,7 +774,10 @@ class HabitNotifier extends StateNotifier<AsyncValue<List<Habit>>> {
 
   Future<void> loadHabits() async {
     try {
-      state = const AsyncValue.loading();
+      // Keep previous data on re-loads (e.g. midnight rollover, restore) so
+      // the Streaks list and dashboard card never blank out mid-session.
+      final hasData = state.maybeWhen(data: (_) => true, orElse: () => false);
+      if (!hasData) state = const AsyncValue.loading();
       final habits = await dbHelper.getAllHabits();
       _updateState(habits);
     } catch (e, st) {

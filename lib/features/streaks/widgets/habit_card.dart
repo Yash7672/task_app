@@ -305,7 +305,6 @@ class HabitCard extends ConsumerWidget {
 
     if (result != null) {
       await ref.read(habitsProvider.notifier).updateHabit(result);
-      final _ = ref.refresh(habitsProvider);
       messenger.showSnackBar(
         const SnackBar(content: Text('Streak updated!')),
       );
@@ -336,7 +335,6 @@ class HabitCard extends ConsumerWidget {
 
     if (confirm == true) {
       await ref.read(habitsProvider.notifier).deleteHabit(habit.id);
-      final _ = ref.refresh(habitsProvider);
       messenger.showSnackBar(
         const SnackBar(content: Text('Streak deleted!')),
       );

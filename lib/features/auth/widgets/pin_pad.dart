@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -33,26 +35,42 @@ class PinPad extends StatefulWidget {
 
 class _PinPadState extends State<PinPad> {
   String _buffer = '';
+  Timer? _submitTimer;
 
   void _onDigit(String digit) {
     if (!widget.enabled || _buffer.length >= 4) return;
+    // A new digit invalidates any pending auto-submit (e.g. the user typed a
+    // 4th digit then immediately pressed another key).
+    _submitTimer?.cancel();
+    _submitTimer = null;
     HapticFeedback.lightImpact();
     widget.onInputChanged?.call();
     setState(() => _buffer += digit);
     if (_buffer.length == 4) {
       final pin = _buffer;
-      Future.delayed(const Duration(milliseconds: 120), () {
+      _submitTimer = Timer(const Duration(milliseconds: 120), () {
+        if (!mounted) return;
         widget.onPinCompleted(pin);
-        if (mounted) setState(() => _buffer = '');
+        setState(() => _buffer = '');
       });
     }
   }
 
   void _onBackspace() {
     if (!widget.enabled || _buffer.isEmpty) return;
+    // Cancel any pending auto-submit so backspacing the 4th digit never fires
+    // a stale pin after the user corrected their entry.
+    _submitTimer?.cancel();
+    _submitTimer = null;
     HapticFeedback.selectionClick();
     widget.onInputChanged?.call();
     setState(() => _buffer = _buffer.substring(0, _buffer.length - 1));
+  }
+
+  @override
+  void dispose() {
+    _submitTimer?.cancel();
+    super.dispose();
   }
 
   @override

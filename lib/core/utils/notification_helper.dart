@@ -464,10 +464,12 @@ class NotificationHelper {
     final capped = reminderMinutes.length > maxReminders
         ? reminderMinutes.sublist(0, maxReminders)
         : reminderMinutes;
+    // One clock read for the whole batch so each reminder is evaluated against
+    // the same "now" (hoisted out of the per-reminder loop).
+    final now = DateTime.now();
     for (int i = 0; i < capped.length; i++) {
       final minutes = capped[i];
       final scheduledDate = taskDateTime.subtract(Duration(minutes: minutes));
-      final now = DateTime.now();
       if (!scheduledDate.isAfter(now)) {
         continue;
       }

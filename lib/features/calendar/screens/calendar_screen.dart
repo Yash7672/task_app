@@ -88,9 +88,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     // Memoized: recomputed only when the underlying task list changes, not on
     // every day-tap or rebuild (see tasksByDayProvider in task_provider.dart).
     final tasksByDay = ref.watch(tasksByDayProvider);
-    final day = DateTime(
-        _selectedDate.year, _selectedDate.month, _selectedDate.day);
-    final selectedTasks = tasksByDay[day] ?? const <Task>[];
+    final selectedTasks =
+        tasksByDay[_dayKey(_selectedDate)] ?? const <Task>[];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Calendar')),
@@ -126,8 +125,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   });
                 },
                 eventLoader: (day) =>
-                    tasksByDay[DateTime(day.year, day.month, day.day)] ??
-                    const [],
+                    tasksByDay[_dayKey(day)] ?? const [],
               ),
             ),
           ),
@@ -135,7 +133,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                  'Tasks for ${day.day}/${day.month}/${day.year}',
+                  'Tasks for ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
                   style: Theme.of(context).textTheme.titleMedium),
             ),
           ),
@@ -158,3 +156,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     );
   }
 }
+
+/// Local calendar-date integer key (`yyyyMMdd`) matching the keys used by
+/// [tasksByDayProvider] for O(1) day lookups.
+int _dayKey(DateTime date) => date.year * 10000 + date.month * 100 + date.day;

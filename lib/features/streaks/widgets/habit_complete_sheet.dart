@@ -136,11 +136,17 @@ class _HabitCompleteSheetState extends ConsumerState<_HabitCompleteSheet> {
     }
 
     void addItemAndSync(String value) {
-      notifier.addItem(value).then((_) => _syncSnapshot());
+      notifier
+          .addItem(value)
+          .then((_) => _syncSnapshot())
+          .catchError((Object e) => debugPrint('Error adding item: $e'));
     }
 
     void deleteItemAndSync(HabitLogItem item) {
-      notifier.deleteItem(item).then((_) => _syncSnapshot());
+      notifier
+          .deleteItem(item)
+          .then((_) => _syncSnapshot())
+          .catchError((Object e) => debugPrint('Error deleting item: $e'));
     }
 
     return Padding(

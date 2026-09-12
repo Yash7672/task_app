@@ -410,9 +410,12 @@ class TaskListItem extends ConsumerWidget {
                       const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
+                          // Resolve the navigator once so the push uses the
+                          // same route stack after the sheet pops, instead of
+                          // reaching for a context that is being deactivated.
+                          final navigator = Navigator.of(context);
+                          navigator.pop();
+                          navigator.push(
                             MaterialPageRoute(
                               builder: (_) =>
                                   AddEditTaskScreen(taskToEdit: task),

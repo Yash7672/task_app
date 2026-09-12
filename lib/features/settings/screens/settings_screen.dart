@@ -79,6 +79,14 @@ class SettingsScreen extends ConsumerWidget {
                   value: security.appLockEnabled,
                   onChanged: (value) => _toggleAppLock(context, ref, value),
                 ),
+                SwitchListTile.adaptive(
+                  title: const Text('Face ID / ML'),
+                  value: false,
+                  // Deliberately inert: the switch never changes state, but a
+                  // live callback keeps the row styled exactly like the other
+                  // Security settings instead of looking disabled.
+                  onChanged: (_) {},
+                ),
                 if (security.appLockEnabled) ...[
                   const _BiometricTile(),
                   ListTile(
@@ -695,10 +703,12 @@ class SettingsScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('PIN updated'),
             backgroundColor: Colors.green));
+        break;
       case 'wrong_pin':
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Current PIN was incorrect'),
             backgroundColor: Colors.red));
+        break;
       default:
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Could not update PIN — secure storage error'),

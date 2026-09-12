@@ -178,8 +178,9 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       );
     }
 
-    final focus = ref.watch(focusProvider);
-    final activeFocus = focus.active;
+    // Select `active` so the 1 s focus ticker does not rebuild the lock
+    // screen; only session start/stop transitions matter here.
+    final activeFocus = ref.watch(focusProvider.select((s) => s.active));
 
     // STRICT FOCUS: absolute priority. Skip app lock entirely.
     // The user is already "locked" in focus mode with its own PIN system.

@@ -165,8 +165,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           CircleAvatar(
             radius: 42,
             backgroundColor: theme.colorScheme.primary,
-            backgroundImage:
-                hasImage ? FileImage(File(profile.imagePath!)) : null,
+            backgroundImage: hasImage
+                ? ResizeImage(FileImage(File(profile.imagePath!)), width: 256)
+                : null,
             child: hasImage
                 ? null
                 : Text(
