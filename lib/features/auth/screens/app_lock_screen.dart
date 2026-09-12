@@ -11,6 +11,7 @@ import '../../../services/security/biometric_service.dart';
 import '../../../services/widget_action_handler.dart';
 import '../../focus/screens/focus_active_screen.dart';
 import '../widgets/pin_pad.dart';
+import 'face_id_capture_screen.dart';
 
 class AppLockGate extends ConsumerStatefulWidget {
   const AppLockGate({super.key});
@@ -23,7 +24,6 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     with WidgetsBindingObserver {
   String? _errorText;
   bool _authenticating = false;
-  IconData _biometricIcon = Icons.fingerprint;
   bool _widgetActionHandled = false;
 
   /// Drives the visible lockout countdown while it is active.
@@ -37,20 +37,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadBiometricIcon();
       _syncLockout();
-    });
-    _setupListener();
-  }
-
-  void _setupListener() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.listenManual<SecurityState>(securityProvider, (previous, next) {
-        if ((previous?.isLoading ?? true) && !next.isLoading) {
-          _loadBiometricIcon();
-        }
-      });
     });
   }
 
@@ -81,15 +68,6 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   String _lockoutLabel(int seconds) =>
       seconds > 0 ? '$seconds s' : 'a moment';
 
-  Future<void> _loadBiometricIcon() async {
-    final security = ref.read(securityProvider);
-    final useFace =
-        (security.faceIdEnabled && security.faceIdAvailable) ||
-            await BiometricService.prefersFace();
-    if (!mounted) return;
-    setState(() => _biometricIcon = useFace ? Icons.face : Icons.fingerprint);
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -109,7 +87,6 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
         security.onAppResumed();
         if (ref.read(securityProvider).requiresAuth) {
           setState(() => _errorText = null);
-          _loadBiometricIcon();
         }
       default:
         break;
@@ -126,11 +103,8 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       return;
     }
     _authenticating = true;
-    final security = ref.read(securityProvider);
-    final reason = (security.faceIdEnabled && security.faceIdAvailable)
-        ? 'Scan your face to unlock PYLO'
-        : 'Unlock PYLO to access your tasks';
-    final success = await BiometricService.authenticate(reason: reason);
+    final success =
+        await BiometricService.authenticate(reason: 'Scan your fingerprint to unlock PYLO');
     _authenticating = false;
     if (!mounted) return;
     if (success) {
@@ -138,6 +112,34 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       setState(() => _errorText = null);
     } else {
       setState(() => _errorText = 'Biometric failed. Enter PIN.');
+    }
+  }
+
+  /// Dedicated on-device Face ID path — completely separate from the OS
+  /// fingerprint scanner. Pushes the ML camera screen, which returns true
+  /// only after a real embedding match + liveness pass.
+  Future<void> _authenticateWithFaceId() async {
+    if (_authenticating) return;
+    final notifier = ref.read(securityProvider.notifier);
+    if (notifier.isPinLockedOut) {
+      _syncLockout();
+      return;
+    }
+    _authenticating = true;
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const FaceIdCaptureScreen(mode: FaceIdCaptureMode.authenticate),
+      ),
+    );
+    _authenticating = false;
+    if (!mounted) return;
+    if (ok == true) {
+      ref.read(securityProvider.notifier).unlock();
+      setState(() => _errorText = null);
+    } else {
+      setState(() => _errorText = 'Face ID failed. Enter PIN.');
     }
   }
 
@@ -214,22 +216,38 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     }
 
     return Scaffold(
-      body: PinPad(
-        title: 'PYLO is locked',
-        errorText: errorText,
-        onPinCompleted: _onPinEntered,
-        showBiometric:
-            security.shouldOfferAnyBiometric && !lockedOut,
-        onBiometricRequested: _authenticateWithBiometric,
-        biometricIcon: _biometricIcon,
-        enabled: !lockedOut,
-        onInputChanged: errorText == null
-            ? null
-            : () {
-                if (mounted && !lockedOut) {
-                  setState(() => _errorText = null);
-                }
-              },
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: PinPad(
+                title: 'PYLO is locked',
+                errorText: errorText,
+                onPinCompleted: _onPinEntered,
+                showBiometric: security.shouldOfferBiometric && !lockedOut,
+                onBiometricRequested: _authenticateWithBiometric,
+                enabled: !lockedOut,
+                onInputChanged: errorText == null
+                    ? null
+                    : () {
+                        if (mounted && !lockedOut) {
+                          setState(() => _errorText = null);
+                        }
+                      },
+              ),
+            ),
+            if (security.shouldOfferFaceId && !lockedOut)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: TextButton.icon(
+                  onPressed: _authenticateWithFaceId,
+                  icon: const Icon(Icons.face_outlined),
+                  label: const Text('Unlock with Face ID'),
+                ),
+              ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }

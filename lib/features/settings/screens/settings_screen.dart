@@ -22,8 +22,10 @@ import '../../../services/backup/backup_service.dart';
 import '../../../services/backup/restore_service.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/home_widget_service.dart';
+import '../../../services/security/face_template_store.dart';
 import '../../../theme/app_theme.dart';
 import '../../categories/screens/manage_categories_screen.dart';
+import '../../auth/screens/face_id_capture_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -79,16 +81,17 @@ class SettingsScreen extends ConsumerWidget {
                   value: security.appLockEnabled,
                   onChanged: (value) => _toggleAppLock(context, ref, value),
                 ),
-                SwitchListTile.adaptive(
-                  title: const Text('Face ID / ML'),
-                  value: false,
-                  // Deliberately inert: the switch never changes state, but a
-                  // live callback keeps the row styled exactly like the other
-                  // Security settings instead of looking disabled.
-                  onChanged: (_) {},
-                ),
                 if (security.appLockEnabled) ...[
                   const _BiometricTile(),
+                  const _FaceIdTile(),
+                  if (security.faceTemplateExists)
+                    ListTile(
+                      title: const Text('Remove Face ID'),
+                      subtitle: const Text(
+                          'Delete the stored face template from this device'),
+                      trailing: const Icon(Icons.delete_outline),
+                      onTap: () => _removeFaceId(context, ref),
+                    ),
                   ListTile(
                     title: const Text('Change PIN'),
                     subtitle: const Text('Update your app lock PIN'),
@@ -621,6 +624,61 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _removeFaceId(BuildContext context, WidgetRef ref) async {
+    // Deleting the face template is irreversible — require the current PIN so
+    // a stranger with the device cannot silently purge the owner's Face ID.
+    final security = ref.read(securityProvider);
+    if (security.hasPin) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Remove Face ID?'),
+          content: const Text(
+              'Your face template will be deleted from this device. '
+              'PIN and fingerprint unlock will keep working; you can set up '
+              'Face ID again any time.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Remove')),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+
+      // Re-verify the PIN before the destructive step.
+      String? pin;
+      while (true) {
+        if (!context.mounted) return;
+        pin = await _promptPin(context, 'Enter PIN to remove Face ID');
+        if (pin == null) return;
+        final result =
+            await ref.read(securityProvider.notifier).verifyPinStrict(pin);
+        if (result == 'ok') break;
+        if (!context.mounted) return;
+        if (result == 'error') {
+          final recover = await _offerStorageRecovery(context);
+          if (!context.mounted) return;
+          if (recover != true) return;
+          break;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('PIN was incorrect — Face ID kept'),
+            backgroundColor: Colors.red));
+      }
+    }
+
+    await FaceTemplateStore.delete();
+    await ref.read(securityProvider.notifier).setFaceIdEnabled(false);
+    await ref.read(securityProvider.notifier).refreshFaceTemplateStatus();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Face ID removed')));
+  }
+
   Future<void> _changePin(BuildContext context, WidgetRef ref) async {
     final security = ref.read(securityProvider);
 
@@ -946,6 +1004,86 @@ class _BiometricTileState extends ConsumerState<_BiometricTile> {
             }
           : null,
     );
+  }
+}
+
+/// On-device Face ID (camera + ML kit + MobileFaceNet embedding). Enabling
+/// opens the enrollment flow; the toggle reflects the enabled *and* enrolled
+/// state so a missing template can never masquerade as "on".
+class _FaceIdTile extends ConsumerStatefulWidget {
+  const _FaceIdTile();
+
+  @override
+  ConsumerState<_FaceIdTile> createState() => _FaceIdTileState();
+}
+
+class _FaceIdTileState extends ConsumerState<_FaceIdTile> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(securityProvider.notifier).refreshFaceTemplateStatus();
+      ref.read(securityProvider.notifier).refreshBiometrics();
+    });
+  }
+
+  Future<void> _enable() async {
+    final enabled = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const FaceIdCaptureScreen(mode: FaceIdCaptureMode.enroll),
+      ),
+    );
+    if (enabled != true || !mounted) return;
+    final notifier = ref.read(securityProvider.notifier);
+    await notifier.setFaceIdEnabled(true);
+    await notifier.refreshFaceTemplateStatus();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Face ID set up')));
+  }
+
+  Future<void> _disable() async {
+    final notifier = ref.read(securityProvider.notifier);
+    await notifier.setFaceIdEnabled(false);
+    // The template itself is kept so the user can re-enable instantly;
+    // "Remove Face ID" fully deletes it.
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Face ID turned off')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final security = ref.watch(securityProvider);
+    final available = security.faceIdAvailable;
+    final hasTemplate = security.faceTemplateExists;
+
+    return SwitchListTile.adaptive(
+      title: const Text('Face ID'),
+      subtitle: Text(_subtitle(security, available, hasTemplate)),
+      value: security.faceIdEnabled && hasTemplate,
+      onChanged: available
+          ? (value) {
+              if (value) {
+                _enable();
+              } else {
+                _disable();
+              }
+            }
+          : null,
+    );
+  }
+
+  String _subtitle(SecurityState security, bool available, bool hasTemplate) {
+    if (!available) return 'No camera available on this device';
+    if (!hasTemplate) {
+      return 'Scan your face to unlock PYLO';
+    }
+    if (security.faceIdEnabled) return 'Unlock PYLO with your face';
+    return 'Set up to unlock PYLO with your face (template kept)';
   }
 }
 

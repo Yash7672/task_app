@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../services/security/biometric_service.dart';
-import '../../services/security/pin_service.dart';
+import '../services/security/biometric_service.dart';
+import '../services/security/face_id_service.dart';
+import '../services/security/face_template_store.dart';
+import '../services/security/pin_service.dart';
 
 enum LockTimeout { immediately, seconds30, minute1, minutes5 }
 
@@ -33,6 +35,12 @@ class SecurityState {
   final bool biometricAvailable;
   final bool faceIdEnabled;
   final bool faceIdAvailable;
+
+  /// True when a usable face template is stored on this device. Face ID only
+  /// unlocks when [faceIdEnabled] AND [faceIdAvailable] AND [faceTemplateExists]
+  /// all hold — an enabled flag with a missing template must never advertise
+  /// a fake unlock option.
+  final bool faceTemplateExists;
   final bool hasPin;
   final LockTimeout lockTimeout;
   final bool isLocked;
@@ -44,6 +52,7 @@ class SecurityState {
     this.biometricAvailable = false,
     this.faceIdEnabled = false,
     this.faceIdAvailable = false,
+    this.faceTemplateExists = false,
     this.hasPin = false,
     this.lockTimeout = LockTimeout.immediately,
     this.isLocked = true,
@@ -55,7 +64,11 @@ class SecurityState {
   bool get shouldOfferBiometric =>
       requiresAuth && biometricEnabled && biometricAvailable;
 
-  bool get shouldOfferFaceId => requiresAuth && faceIdEnabled && faceIdAvailable;
+  bool get shouldOfferFaceId =>
+      requiresAuth &&
+      faceIdEnabled &&
+      faceIdAvailable &&
+      faceTemplateExists;
 
   bool get shouldOfferAnyBiometric =>
       shouldOfferBiometric || shouldOfferFaceId;
@@ -67,6 +80,7 @@ class SecurityState {
     bool? biometricAvailable,
     bool? faceIdEnabled,
     bool? faceIdAvailable,
+    bool? faceTemplateExists,
     bool? hasPin,
     LockTimeout? lockTimeout,
     bool? isLocked,
@@ -78,6 +92,7 @@ class SecurityState {
       biometricAvailable: biometricAvailable ?? this.biometricAvailable,
       faceIdEnabled: faceIdEnabled ?? this.faceIdEnabled,
       faceIdAvailable: faceIdAvailable ?? this.faceIdAvailable,
+      faceTemplateExists: faceTemplateExists ?? this.faceTemplateExists,
       hasPin: hasPin ?? this.hasPin,
       lockTimeout: lockTimeout ?? this.lockTimeout,
       isLocked: isLocked ?? this.isLocked,
@@ -123,18 +138,20 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
 
   Future<void> load() async {
     try {
-      // Phase 1: Fast-critical path — only SharedPreferences + PIN check.
-      // This determines whether auth is needed at all and must complete
-      // before the lock screen can render. Biometric checks are slow
-      // platform calls and are deferred to Phase 2 so the lock screen
+      // Phase 1: Fast-critical path — SharedPreferences + PIN check + face
+      // template existence. This determines whether auth is needed at all and
+      // must complete before the lock screen can render. Biometric checks are
+      // slow platform calls and are deferred to Phase 2 so the lock screen
       // appears instantly.
       final results = await Future.wait([
         _getPrefs(),
         PinService.hasPin(),
+        FaceTemplateStore.exists(),
       ]);
 
       final prefs = results[0] as SharedPreferences;
       final hasPin = results[1] as bool;
+      final faceTemplateExists = results[2] as bool;
 
       var appLockEnabled = prefs.getBool('app_lock_enabled') ?? false;
 
@@ -156,6 +173,17 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
         debugPrint('App Lock self-healed: stored PIN missing');
       }
 
+      // Self-heal: a Face ID flag without a stored template (e.g. template
+      // cleared in OS secure storage, or restored from a backup that carried
+      // the pref but no biometric blob) must not advertise fiat unlock.
+      // PIN/fingerprint keep working untouched.
+      var faceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
+      if (faceIdEnabled && !faceTemplateExists) {
+        faceIdEnabled = false;
+        await prefs.setBool('face_id_enabled', false);
+        debugPrint('Face ID self-healed: no template stored');
+      }
+
       // Show lock screen immediately with biometrics assumed unavailable.
       // Phase 2 will update biometric state once the platform responds.
       state = state.copyWith(
@@ -163,8 +191,9 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
         appLockEnabled: appLockEnabled && hasPin,
         biometricEnabled: prefs.getBool('biometric_enabled') ?? false,
         biometricAvailable: false,
-        faceIdEnabled: prefs.getBool('face_id_enabled') ?? false,
+        faceIdEnabled: faceIdEnabled,
         faceIdAvailable: false,
+        faceTemplateExists: faceTemplateExists,
         hasPin: hasPin,
         lockTimeout:
             LockTimeoutX.fromName(prefs.getString('lock_timeout')),
@@ -181,14 +210,14 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     }
   }
 
-  /// Checks biometric/face availability without blocking the UI.
+  /// Checks face-camera availability without blocking the UI.
   /// State is updated when the platform responds, causing the lock screen
-  /// to re-render with the correct biometric button visibility.
+  /// to re-render with the correct Face ID button visibility.
   Future<void> _loadBiometricsInBackground() async {
     try {
       final results = await Future.wait([
         BiometricService.isAvailable(),
-        BiometricService.hasFace(),
+        FaceIdService.isCameraAvailable(),
       ]);
       final biometricAvailable = results[0];
       final faceIdAvailable = results[1];
@@ -237,10 +266,13 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     await prefs.setBool('biometric_enabled', false);
     await prefs.setBool('face_id_enabled', false);
     await PinService.clearPin();
+    // Face data is not kept once the app lock is gone — minimal retention.
+    await FaceTemplateStore.delete();
     state = state.copyWith(
       appLockEnabled: false,
       biometricEnabled: false,
       faceIdEnabled: false,
+      faceTemplateExists: false,
       hasPin: false,
       isLocked: false,
     );
@@ -256,6 +288,14 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
     final prefs = await _getPrefs();
     await prefs.setBool('face_id_enabled', enabled);
     state = state.copyWith(faceIdEnabled: enabled);
+  }
+
+  /// Re-reads whether a face template exists in secure storage and syncs the
+  /// state flag. Call after enrollment, removal, or an import.
+  Future<void> refreshFaceTemplateStatus() async {
+    final exists = await FaceTemplateStore.exists();
+    if (state.faceTemplateExists == exists) return;
+    state = state.copyWith(faceTemplateExists: exists);
   }
 
   /// Returns 'ok', 'wrong_pin' or 'error'.
@@ -288,8 +328,12 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
   /// lock state (safe to call from Settings at any time).
   Future<void> refreshBiometrics() async {
     try {
-      final available = await BiometricService.isAvailable();
-      final faceAvailable = await BiometricService.hasFace();
+      final results = await Future.wait([
+        BiometricService.isAvailable(),
+        FaceIdService.isCameraAvailable(),
+      ]);
+      final available = results[0];
+      final faceAvailable = results[1];
       if (state.biometricAvailable != available ||
           state.faceIdAvailable != faceAvailable) {
         state = state.copyWith(
@@ -301,9 +345,6 @@ class SecurityNotifier extends StateNotifier<SecurityState> {
       debugPrint('Biometric refresh failed: $e');
     }
   }
-
-  /// True when face recognition is the primary enrolled biometric.
-  Future<bool> prefersFaceBiometric() => BiometricService.prefersFace();
 
   Future<bool> verifyPin(String pin) async {
     return PinService.verifyPin(pin);

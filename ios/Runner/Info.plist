@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>PYLO uses Face ID to unlock the app securely.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>PYLO needs camera access to set up or verify Face ID on this device. Images are processed on-device and never leave your phone.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
